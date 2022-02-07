@@ -13,9 +13,8 @@ import BinjaNxt.PacketHandlerInfo
 import BinjaNxt.PacketHandler
 import BinjaNxt.Nxt
 import BinjaNxt
-import importlib
 
-importlib.reload(BinjaNxt.NxtUtils);importlib.reload(BinjaNxt.PacketHandlerInfo);importlib.reload(BinjaNxt.PacketHandler);importlib.reload(BinjaNxt.Nxt);importlib.reload(BinjaNxt);BinjaNxt.refactor_nxt(bv, 0)
+BinjaNxt.refactor_nxt(bv, 0)
 ```
 
 ## License
