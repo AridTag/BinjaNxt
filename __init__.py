@@ -12,13 +12,16 @@ You should have received a copy of the GNU General Public License along with Bin
 If not, see <https://www.gnu.org/licenses/>.
 """
 from binaryninja import *
-from BinjaNxt import Nxt
+
+from BinjaNxt.Nxt import Nxt
+#from Nxt import Nxt
 
 plugin_name = 'BinjaNxt'
 
 
-def refactor_nxt(bv: BinaryView, addr):
-    if not Nxt.run(bv):
+def run(bv: BinaryView):
+    nxt = Nxt()
+    if not nxt.run(bv):
         show_message_box(plugin_name, 'Refactoring failed! Check the log for more information',
                          MessageBoxButtonSet.OKButtonSet, MessageBoxIcon.ErrorIcon)
         return
@@ -26,4 +29,8 @@ def refactor_nxt(bv: BinaryView, addr):
     show_message_box(plugin_name, 'Done!', MessageBoxButtonSet.OKButtonSet, MessageBoxIcon.InformationIcon)
 
 
-PluginCommand.register_for_address("BinjaNxt Refactor", "Refactors the Runescape Nxt client", refactor_nxt)
+def __run(bv: BinaryView, addr):
+    run(bv)
+
+
+PluginCommand.register_for_address("BinjaNxt Refactor", "Refactors the Runescape Nxt client", __run)

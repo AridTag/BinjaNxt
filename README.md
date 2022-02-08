@@ -6,15 +6,13 @@ Binary Ninja plugin for automated refactoring of the RuneScape Nxt client
 ## Description:
 Plugin for Binary Ninja originally based on the Ghidra script created by [Techdaan](https://github.com/Techdaan/) : [rs3nxt-ghidra-scripts](https://github.com/Techdaan/rs3nxt-ghidra-scripts)
 
+Tested on Windows x64 client versions 921-4 and 922-4.
+
 Can be run via the plugin menu or via the python console by entering the following commands
 ```python
-import BinjaNxt.NxtUtils
-import BinjaNxt.PacketHandlerInfo
-import BinjaNxt.PacketHandler
-import BinjaNxt.Nxt
 import BinjaNxt
 
-BinjaNxt.refactor_nxt(bv, 0)
+BinjaNxt.run(bv)
 ```
 
 ## License
