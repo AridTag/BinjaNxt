@@ -12,23 +12,25 @@ You should have received a copy of the GNU General Public License along with Bin
 If not, see <https://www.gnu.org/licenses/>.
 """
 
-from binaryninja import *
-from binaryninja.log import log_info, log_warn, log_error, log_debug
-
 from BinjaNxt.NxtUtils import *
 from BinjaNxt.PacketHandler import *
-
-
-# from NxtUtils import *
-# from PacketHandler import *
+from BinjaNxt.JagTypes import *
+#from JagTypes import *
+#from PacketHandler import *
+#from NxtUtils import *
 
 
 class Nxt:
+    jag_types: JagTypes = JagTypes()
+    packet_handlers: PacketHandlers
     current_time_ms_addr: Optional[int] = None
     checked_alloc_addr: Optional[int] = None
     connection_manager_ctor_addr: Optional[int] = None
     client_ctor_addr: Optional[int] = None
     static_client_ptrs: list[int] = []
+
+    def __init__(self):
+        self.packet_handlers = PacketHandlers(self.jag_types)
 
     def run(self, bv: BinaryView) -> bool:
         self.define_types(bv)
@@ -40,14 +42,14 @@ class Nxt:
             log_error('Failed to refactor jag::ConnectionManager')
             return False
 
-        if not refactor_packets(bv, self.connection_manager_ctor_addr):
+        if not self.packet_handlers.run(bv, self.connection_manager_ctor_addr):
             log_error('Failed to refactor packets')
             return False
 
         return True
 
     def define_types(self, bv: BinaryView):
-        t_isaac = Type.structure(members=[
+        self.jag_types.isaac = Type.structure(members=[
             (Type.int(4, False), 'valuesRemaining'),
             (Type.array(Type.int(4, False), 256), 'rand_results'),
             (Type.array(Type.int(4, False), 256), 'mm'),
@@ -55,18 +57,18 @@ class Nxt:
             (Type.int(4), 'bb'),
             (Type.int(4), 'cc')
         ], packed=True)
-        bv.define_user_type('jag::Isaac', t_isaac)
+        bv.define_user_type(self.jag_types.isaac_name, self.jag_types.isaac)
 
-        t_heap_interface = Type.structure(packed=True)
-        bv.define_user_type('jag::HeapInterface', t_heap_interface)
+        self.jag_types.heap_interface = Type.structure(packed=True)
+        bv.define_user_type(self.jag_types.heap_interface_name, self.jag_types.heap_interface)
 
-        t_clientprot = Type.structure(members=[
+        self.jag_types.client_prot = Type.structure(members=[
             (Type.int(4, False), 'opcode'),
             (Type.int(4), 'size')
         ], packed=True)
-        bv.define_user_type('jag::ClientProt', t_clientprot)
+        bv.define_user_type(self.jag_types.client_prot_name, self.jag_types.client_prot)
 
-        t_packet = Type.structure(members=[
+        self.jag_types.packet = Type.structure(members=[
             (Type.int(8), 'unk1'),
             (Type.int(8), 'capacity'),
             (Type.pointer(bv.arch, Type.int(1, False)), 'buffer'),
@@ -74,7 +76,7 @@ class Nxt:
             (Type.int(4), 'unk2'),
             (Type.int(8), 'unk3')
         ], packed=True)
-        bv.define_user_type('jag::Packet', t_packet)
+        bv.define_user_type(self.jag_types.packet_name, self.jag_types.packet)
 
     def refactor_app_init(self, bv: BinaryView) -> bool:
         main_init = self.find_main_init(bv)
@@ -91,7 +93,7 @@ class Nxt:
             if len(self.static_client_ptrs) == 1:
                 logmsg = 'Found jag::Client* jag::s_pClient @ {:#x}'.format(self.static_client_ptrs[0])
                 bv.define_user_data_var(self.static_client_ptrs[0],
-                                        Type.pointer(bv.arch, bv.get_type_by_name('jag::Client')),
+                                        Type.pointer(bv.arch, self.jag_types.client),
                                         'jag::s_pClient')
             else:
                 logmsg = 'Found multiple jag::Client* jag::s_pClient'
@@ -102,7 +104,7 @@ class Nxt:
                         name += str(idx)
 
                     bv.define_user_data_var(self.static_client_ptrs[0],
-                                            Type.pointer(bv.arch, bv.get_type_by_name('jag::Client')),
+                                            Type.pointer(bv.arch, self.jag_types.client),
                                             name)
 
             log_info(logmsg)
@@ -161,22 +163,24 @@ class Nxt:
                 found_alloc = True
                 checked_alloc = bv.get_function_at(dest_addr)
                 self.checked_alloc_addr = checked_alloc.start
-                rename_func(checked_alloc, 'jag::HeapInterface::CheckedAlloc')
+                rename_func(checked_alloc, '{}::CheckedAlloc'.format(self.jag_types.heap_interface_name))
                 change_ret_type(checked_alloc, Type.pointer(bv.arch, Type.void()))
                 change_var(checked_alloc.parameter_vars[0], 'num_bytes', Type.int(4))
                 change_var(checked_alloc.parameter_vars[1], 'alignment', Type.int(4))
 
             else:
-                with StructureBuilder.builder(bv, QualifiedName('jag::Client')) as client_builder:
+                with StructureBuilder.builder(bv, QualifiedName(self.jag_types.client_name)) as client_builder:
                     client_builder.packed = True
                     client_builder.alignment = client_struct_alignment
                     client_builder.width = client_struct_size
 
+                self.jag_types.client = bv.get_type_by_name(self.jag_types.client_name)
+
                 client_ctor = bv.get_function_at(dest_addr)
                 self.client_ctor_addr = client_ctor.start
-                rename_func(client_ctor, 'jag::Client::ctor')
+                rename_func(client_ctor, '{}::ctor'.format(self.jag_types.client_name))
                 change_var(client_ctor.parameter_vars[0], 'pClient',
-                           Type.pointer(bv.arch, bv.get_type_by_name('jag::Client')))
+                           Type.pointer(bv.arch, self.jag_types.client))
                 break
         return True
 
@@ -346,17 +350,19 @@ class Nxt:
             log_error('Failed to determine size of jag::ConnectionManager')
             return False
 
-        with StructureBuilder.builder(bv, QualifiedName('jag::ConnectionManager')) as builder:
+        with StructureBuilder.builder(bv, QualifiedName(self.jag_types.conn_mgr_name)) as builder:
             builder.packed = True
             builder.width = allocation.size
             builder.alignment = allocation.alignment
 
+        self.jag_types.conn_mgr = bv.get_type_by_name(self.jag_types.conn_mgr_name)
+
         self.connection_manager_ctor_addr = ctor.start
         log_info('Found jag::ConnectionManager::ctor at {:#x}'.format(self.connection_manager_ctor_addr))
 
-        rename_func(ctor, 'jag::ConnectionManager::ctor')
-        change_var_type(ctor.parameter_vars[0], Type.pointer(bv.arch, bv.get_type_by_name('jag::ConnectionManager')))
-        change_var_type(ctor.parameter_vars[1], Type.pointer(bv.arch, bv.get_type_by_name('jag::Client')))
+        rename_func(ctor, '{}::ctor'.format(self.jag_types.conn_mgr_name))
+        change_var_type(ctor.parameter_vars[0], Type.pointer(bv.arch, self.jag_types.conn_mgr))
+        change_var_type(ctor.parameter_vars[1], Type.pointer(bv.arch, self.jag_types.client))
         return True
 
     def find_current_time_addr(self,
