@@ -137,7 +137,7 @@ class Nxt:
         client_struct_size = 0
         client_struct_alignment = 0
         for llil in main_init.llil.instructions:
-            (is_valid, dest_addr) = is_valid_function_call(llil)
+            (is_valid, dest_addr) = is_valid_function_call(bv, llil)
             if not is_valid or dest_addr is None:
                 continue
 
@@ -338,7 +338,8 @@ class Nxt:
             log_error('Expected 1 xref to jag::ConnectionManager::ctor but got {}'.format(len(ctor_refs)))
             return False
 
-        allocation = find_allocation_from_ctor_call(list(ctor_refs[0].function.llil_instructions),
+        allocation = find_allocation_from_ctor_call(bv,
+                                                    list(ctor_refs[0].function.llil_instructions),
                                                     ctor_refs[0].function.get_llil_at(ctor_refs[0].address),
                                                     self.checked_alloc_addr)
         if allocation is None:

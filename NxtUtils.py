@@ -14,7 +14,7 @@ If not, see <https://www.gnu.org/licenses/>.
 from typing import Optional
 
 from binaryninja import Function, Type, Undetermined, Variable, BinaryView
-from binaryninja import LowLevelILInstruction, LowLevelILOperation, LowLevelILConstPtr,  LowLevelILLoad
+from binaryninja import LowLevelILInstruction, LowLevelILOperation, LowLevelILConstPtr,  LowLevelILLoad, LowLevelILCall
 
 
 class AllocationDetails:
@@ -26,22 +26,20 @@ class AllocationDetails:
         self.alignment = alignment
 
 
-def is_valid_function_call(llil: LowLevelILInstruction) -> (bool, Optional[int]):
+def is_valid_function_call(bv: BinaryView, llil: LowLevelILInstruction) -> (bool, Optional[int]):
     if llil.operation != LowLevelILOperation.LLIL_CALL or len(llil.operands) != 1:
         return False, None
 
-    # call(0x14055e7b0)
-    if isinstance(llil.operands[0], LowLevelILConstPtr):
-        const_ptr: LowLevelILConstPtr = llil.operands[0]
-        return True, const_ptr.constant
+    call_insn: LowLevelILCall = llil
+    call_dest = call_insn.dest.value
+    if isinstance(call_dest, Undetermined):
+        return False, None
 
-    # call([0x1405ff7c0].q)
-    if isinstance(llil.operands[0], LowLevelILLoad) and isinstance(llil.operands[0].operands[0],
-                                                                   LowLevelILConstPtr):
-        const_ptr: LowLevelILConstPtr = llil.operands[0].operands[0]
-        return True, const_ptr.constant
+    dest_func = bv.get_function_at(call_dest)
+    if dest_func is None:
+        return False, None
 
-    return False, None
+    return True, dest_func.start
 
 
 def change_comment(bv: BinaryView, addr: int, desired_comment: str):
@@ -86,7 +84,8 @@ def find_instruction_index(instructions: list[LowLevelILInstruction], insn: LowL
     return next((i for i, item in enumerate(instructions) if item.address == insn.address), -1)
 
 
-def find_allocation_from_ctor_call(calling_function_instructions: list[LowLevelILInstruction],
+def find_allocation_from_ctor_call(bv: BinaryView,
+                                   calling_function_instructions: list[LowLevelILInstruction],
                                    calling_instruction: LowLevelILInstruction,
                                    alloc_addr: int) -> Optional[AllocationDetails]:
     """
@@ -94,6 +93,7 @@ def find_allocation_from_ctor_call(calling_function_instructions: list[LowLevelI
     The value of num_bytes (rcx) must be able to be determined.
     If the value of alignment (rdx) cannot be determined then a default alignment of 16 will be assumed
 
+    @param bv:
     @param calling_function_instructions:
     @param calling_instruction:
     @param alloc_addr: the address of the alloc function. It is assumed the alloc signature is as follows: void* alloc(int32_t num_bytes, int32_t alignment)
@@ -105,7 +105,7 @@ def find_allocation_from_ctor_call(calling_function_instructions: list[LowLevelI
         idx -= 1
         insn = calling_function_instructions[idx]
 
-        (is_valid, dest_addr) = is_valid_function_call(insn)
+        (is_valid, dest_addr) = is_valid_function_call(bv, insn)
         if not is_valid:
             continue
 

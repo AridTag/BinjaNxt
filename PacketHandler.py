@@ -150,7 +150,7 @@ def __initialize_server_packet_handler_names(bv: BinaryView, connection_manager_
         # looking for calls to RegisterPacketHandler. The order of those calls will dictate the name
         # of the handler (I guess?)
         for insn in connection_manager_ctor.llil.instructions:
-            (valid_call, dest_addr) = is_valid_function_call(insn)
+            (valid_call, dest_addr) = is_valid_function_call(bv, insn)
             if not valid_call:
                 continue
 
@@ -225,7 +225,7 @@ def __find_packet_handler_registrations_recurse(bv: BinaryView,
 
     # loop through all the instructions of called_func looking for nested register calls
     for insn in called_func.llil.instructions:
-        (valid_call, dest_addr) = is_valid_function_call(insn)
+        (valid_call, dest_addr) = is_valid_function_call(bv, insn)
         if not valid_call:
             continue
 
@@ -324,7 +324,7 @@ def find_packet_handler_ctor_and_register(bv: BinaryView, connection_manager_cto
     call_num: int = 0
     try:
         for insn in connection_manager_ctor.llil.instructions:
-            (valid_call, dest_addr) = is_valid_function_call(insn)
+            (valid_call, dest_addr) = is_valid_function_call(bv, insn)
             if not valid_call:
                 continue
 
@@ -379,7 +379,7 @@ def __find_packet_handler_base_ctor_recurse(bv: BinaryView, call_insn: LowLevelI
 
     # loop through all the instructions of the called function looking for nested register calls
     for insn in called_func.llil.instructions:
-        (valid_call, dest_addr) = is_valid_function_call(insn)
+        (valid_call, dest_addr) = is_valid_function_call(bv, insn)
         if not valid_call:
             continue
 
