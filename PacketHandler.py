@@ -13,9 +13,9 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 from binaryninja import *
 
-#from BinjaNxt.NxtUtils import *
-#from BinjaNxt.PacketHandlerInfo import *
-#from BinjaNxt.JagTypes import *
+from BinjaNxt.NxtUtils import *
+from BinjaNxt.PacketHandlerInfo import *
+from BinjaNxt.JagTypes import *
 
 #from JagTypes import *
 #from NxtUtils import *

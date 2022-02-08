@@ -214,9 +214,12 @@ class Nxt:
         # the return value of jag::Client::ctor is the client address.
         # we need to track where the address stored in RAX goes
         # we expect to see the address get stored in 1 or more data locations within the next few instructions
-        # we are going to look at the references to those data locations.
-        # One of the data locations will only have a single refs that is doing a store.
-        # That is the data location we want.
+        # we are going to track where the value of rax goes through the rest of the function. If we encountere an
+        # instruction that we can't guarantee hasn't clobbered the register values, we clear the list of registers the
+        # address is known to exist in.
+        # While going through the instructions we will specifically look for stores with a destination of ConstPtr
+        # by the time we reach the end of the function there should only be 1 data location that stil
+        # contains the address of the client
         current_addr_reg_locations: list[RegisterName] = ['rax']
         current_data_locations: list[int] = []
         for i in range(start_idx, len(fun_insns)):
