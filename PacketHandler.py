@@ -13,9 +13,9 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 from binaryninja import *
 
-from BinjaNxt.NxtUtils import *
-from BinjaNxt.PacketHandlerInfo import *
-from BinjaNxt.JagTypes import *
+#from BinjaNxt.NxtUtils import *
+#from BinjaNxt.PacketHandlerInfo import *
+#from BinjaNxt.JagTypes import *
 
 #from JagTypes import *
 #from NxtUtils import *
@@ -217,6 +217,7 @@ class PacketHandlers:
             if handler.done:
                 return
 
+            # TODO: opcode 126 IF_SETPLAYERHEAD_IGNOREWORN isn't even making it here
             packet_handler_vtable = self.__find_packet_handler_vtable(call_insn, containing_func, rcx)
 
             handler.done = True
@@ -254,42 +255,58 @@ class PacketHandlers:
             # In this example case the value stored in the stack from rax is the address of the vtable
             # We want to pull that address so we need to find where it comes from and get the
             # value at that instruction
-
-            # TODO: As of version 922-4 this particular case for IfSetPlayerHeadIgnoreWorn is failing to work
-            # 1071 @ 14002a7c4  rax = data_140877610
-            # 1072 @ 14002a7cb  [rbp + 0x1f {var_40}].q = rbx
-            # 1073 @ 14002a7cf  [rbp + 0x17 {var_48}].q = rax
-            # 1074 @ 14002a7d3  rdx = data_14099c678
-            # 1075 @ 14002a7da  rax = rbp + 0x17 {var_48}
-            # 1076 @ 14002a7de  rcx = rbp + 0x17 {var_48}
-            # 1077 @ 14002a7e2  [rbp + 0x4f {var_10_48}].q = rax {var_48}
-            # 1078 @ 14002a7e6  call(sub_14004eb20)
+            # we start at call_insn and walk backwards through the func instructions looking for
+            # the value of rcx at the call site
             fun_instructions = list(containing_func.llil.instructions)
             fun_instructions.reverse()
             start_idx = find_instruction_index(fun_instructions, call_insn)
-            num = 0
+
+            set_rcx_insn: Optional[LowLevelILSetReg] = None
+            # start by looking for the instruction that sets rcx
             for i in range(start_idx + 1, len(fun_instructions)):
                 fun_insn = fun_instructions[i]
+                if isinstance(fun_insn, LowLevelILSetReg):
+                    set_reg: LowLevelILSetReg = fun_insn
+                    if set_reg.dest.name == RCX:
+                        set_rcx_insn = fun_insn
+                        break
+
+            if set_rcx_insn is None:
+                # couldn't find what sets rcx
+                return None
+
+            rbp_at_set_rcx = set_rcx_insn.get_reg_value(RBP)
+
+            for i in range(start_idx + 1, len(fun_instructions)):
+                fun_insn = fun_instructions[i]
+                rbp_current = fun_insn.get_reg_value(RBP)
                 if isinstance(fun_insn, LowLevelILStore):
                     store_insn: LowLevelILStore = fun_insn
                     dest_insn = store_insn.dest
                     if isinstance(dest_insn, LowLevelILAdd):
                         add_insn: LowLevelILAdd = dest_insn
-                        # TODO: It could be possible for it to be on the right i guess...i don't see why not
                         left_insn = add_insn.left
                         right_insn = add_insn.right
+                        # TODO: It could be possible for left and right to be swapped i guess...i don't see why not
                         if isinstance(left_insn, LowLevelILReg) and isinstance(right_insn, LowLevelILConst):
                             op_reg: LowLevelILReg = left_insn
                             op_const: LowLevelILConst = right_insn
                             if op_reg.src.name.lower() == 'rbp':
-                                if op_const.constant < 0:
+                                if (rbp_current == rbp_at_set_rcx and op_const.constant == rcx.offset) \
+                                        or op_const.constant < 0:
+                                    # TODO: Looking for _any_ negative offset on rbp is probably _not_ the play
+                                    #       but it seems to work for now.
                                     src_insn = store_insn.src
                                     if isinstance(src_insn, LowLevelILReg):
                                         src_reg: LowLevelILReg = src_insn
                                         vtable_addr = src_reg.value.value
+                                        if isinstance(vtable_addr, Undetermined):
+                                            print('! {}'.format(store_insn))
                                     elif isinstance(src_insn, LowLevelILConst):
                                         src_const: LowLevelILConst = src_insn
                                         vtable_addr = src_const.constant
+                                        if isinstance(vtable_addr, Undetermined):
+                                            print('!! {}'.format(store_insn))
                                     else:
                                         print('Unknown src for PacketHandler vtable')
                                         print("[{}] - [{} ({})] - [{} ({})] src {} ({}) {}"

@@ -13,12 +13,12 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 from binaryninja import *
 from binaryninja.log import log_error, log_warn, log_debug, log_info
-#from BinjaNxt.NxtUtils import *
-#from BinjaNxt.PacketHandler import PacketHandlers
-#from BinjaNxt.JagTypes import *
-from JagTypes import *
-from PacketHandler import PacketHandlers
-from NxtUtils import *
+from BinjaNxt.NxtUtils import *
+from BinjaNxt.PacketHandler import PacketHandlers
+from BinjaNxt.JagTypes import *
+#from JagTypes import *
+#from PacketHandler import PacketHandlers
+#from NxtUtils import *
 
 
 class Nxt:
