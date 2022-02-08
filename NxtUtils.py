@@ -13,8 +13,15 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 from typing import Optional
 
-from binaryninja import Function, Type, Undetermined, Variable, BinaryView
-from binaryninja import LowLevelILInstruction, LowLevelILOperation, LowLevelILConstPtr,  LowLevelILLoad, LowLevelILCall
+from binaryninja import Function, Type, Undetermined, Variable, BinaryView, RegisterName
+from binaryninja import LowLevelILInstruction, LowLevelILCall
+
+RCX = RegisterName('rcx')
+RDX = RegisterName('rdx')
+RSI = RegisterName('rsi')
+RBP = RegisterName('rbp')
+R8 = RegisterName('r8')
+R8D = RegisterName('r8d')
 
 
 class AllocationDetails:
@@ -27,7 +34,7 @@ class AllocationDetails:
 
 
 def is_valid_function_call(bv: BinaryView, llil: LowLevelILInstruction) -> (bool, Optional[int]):
-    if llil.operation != LowLevelILOperation.LLIL_CALL or len(llil.operands) != 1:
+    if not isinstance(llil, LowLevelILCall) or len(llil.operands) != 1:
         return False, None
 
     call_insn: LowLevelILCall = llil
@@ -35,7 +42,7 @@ def is_valid_function_call(bv: BinaryView, llil: LowLevelILInstruction) -> (bool
     if isinstance(call_dest, Undetermined):
         return False, None
 
-    dest_func = bv.get_function_at(call_dest)
+    dest_func = bv.get_function_at(call_dest.value)
     if dest_func is None:
         return False, None
 
@@ -113,8 +120,8 @@ def find_allocation_from_ctor_call(bv: BinaryView,
         if dest_addr != alloc_addr:
             return None
 
-        size = insn.get_reg_value('rcx')  # num_bytes
-        alignment = insn.get_reg_value('rdx')  # alignment
+        size = insn.get_reg_value(RCX)  # num_bytes
+        alignment = insn.get_reg_value(RDX)  # alignment
         if isinstance(size, Undetermined):
             print('Unable to determine size of allocation')
             return None

@@ -65,7 +65,7 @@ class PacketHandlers:
                 handle_packet_addr: Optional[int]
                 try:
                     handle_packet_addr = bv.read_int(handle_packet_vtable_addr, bv.arch.address_size, False)
-                except ValueError as e:
+                except ValueError:
                     # TODO: As of version 922-4 there is one unhandled case with IfSetPlayerHeadIgnoreWorn
                     # See: corresponding todo in __find_packet_handler_vtable
                     print(handler.name + ' - ' + str(handler.opcode) + ', ' + hex(handler.vtable))
@@ -111,9 +111,9 @@ class PacketHandlers:
         num_valid = 0
         for ref in ctor_refs:
             call_insn = ref.function.get_llil_at(ref.address)
-            rcx = call_insn.get_reg_value('rcx')
-            rdx = call_insn.get_reg_value('rdx')
-            r8d = call_insn.get_reg_value('r8d')
+            rcx = call_insn.get_reg_value(RCX)
+            rdx = call_insn.get_reg_value(RDX)
+            r8d = call_insn.get_reg_value(R8D)
             if isinstance(rdx, Undetermined):
                 continue
             if isinstance(r8d, Undetermined):
@@ -181,8 +181,8 @@ class PacketHandlers:
                                                     visited_func_addrs: list[int],
                                                     parent_call_ins: Optional[LowLevelILInstruction] = None):
         if called_func.start == self.register_packet_handler_addr:
-            rcx = call_insn.get_reg_value('rcx')
-            rdx = call_insn.get_reg_value('rdx')
+            rcx = call_insn.get_reg_value(RCX)
+            rdx = call_insn.get_reg_value(RDX)
             if isinstance(rcx, Undetermined):
                 print('Undetermined PacketHandler::HandlePacket addr???')
                 return
@@ -196,14 +196,14 @@ class PacketHandlers:
             if handler is None:
                 # a few can be grabbed from rcx at the parent call site
                 if parent_call_ins is not None:
-                    parent_rcx = parent_call_ins.get_reg_value('rcx')
+                    parent_rcx = parent_call_ins.get_reg_value(RCX)
                     if not isinstance(parent_rcx, Undetermined):
                         addr = parent_rcx.value
                         handler = self.packet_handler_from_addr(addr)
 
                     # can also be found in rdx of the parent...
                     if handler is None:
-                        parent_rdx = parent_call_ins.get_reg_value('rdx')
+                        parent_rdx = parent_call_ins.get_reg_value(RDX)
                         if not isinstance(parent_rdx, Undetermined):
                             addr = parent_rdx.value
                             handler = self.packet_handler_from_addr(addr)
@@ -272,19 +272,23 @@ class PacketHandlers:
                 fun_insn = fun_instructions[i]
                 if isinstance(fun_insn, LowLevelILStore):
                     store_insn: LowLevelILStore = fun_insn
-                    if isinstance(store_insn.dest, LowLevelILAdd):
-                        add_insn: LowLevelILAdd = store_insn.dest
+                    dest_insn = store_insn.dest
+                    if isinstance(dest_insn, LowLevelILAdd):
+                        add_insn: LowLevelILAdd = dest_insn
                         # TODO: It could be possible for it to be on the right i guess...i don't see why not
-                        if isinstance(add_insn.left, LowLevelILReg) and isinstance(add_insn.right, LowLevelILConst):
-                            op_reg: LowLevelILReg = add_insn.left
-                            op_const: LowLevelILConst = add_insn.right
+                        left_insn = add_insn.left
+                        right_insn = add_insn.right
+                        if isinstance(left_insn, LowLevelILReg) and isinstance(right_insn, LowLevelILConst):
+                            op_reg: LowLevelILReg = left_insn
+                            op_const: LowLevelILConst = right_insn
                             if op_reg.src.name.lower() == 'rbp':
                                 if op_const.constant < 0:
-                                    if isinstance(store_insn.src, LowLevelILReg):
-                                        src_reg: LowLevelILReg = store_insn.src
+                                    src_insn = store_insn.src
+                                    if isinstance(src_insn, LowLevelILReg):
+                                        src_reg: LowLevelILReg = src_insn
                                         vtable_addr = src_reg.value.value
-                                    elif isinstance(store_insn.src, LowLevelILConst):
-                                        src_const: LowLevelILConst = store_insn.src
+                                    elif isinstance(src_insn, LowLevelILConst):
+                                        src_const: LowLevelILConst = src_insn
                                         vtable_addr = src_const.constant
                                     else:
                                         print('Unknown src for PacketHandler vtable')
@@ -317,7 +321,6 @@ class PacketHandlers:
         print('Searching for jag::PacketHandler::ctor')
         connection_manager_ctor = bv.get_function_at(connection_manager_ctor_addr)
 
-        ctor: Optional[Function] = None
         visited_func_addrs: list[int] = []
         call_num: int = 0
         try:
@@ -354,7 +357,7 @@ class PacketHandlers:
             self.register_packet_handler_addr = called_func.start
             visited_func_addrs.remove(self.register_packet_handler_addr)
 
-            rdx = call_insn.get_reg_value('rdx')
+            rdx = call_insn.get_reg_value(RDX)
             if isinstance(rdx, Undetermined):
                 raise Exception(
                     "Unable to determine address of PacketHandler for initial call to RegisterPacketHandler")
@@ -365,7 +368,8 @@ class PacketHandlers:
             if len(vtable_refs) <= 1:
                 raise Exception("Expected more than 1 initial vtable reference but got " + str(len(vtable_refs)))
 
-            # we want to filter the vtable refs down to just the call to the base ctor that takes the vtable as a parameter
+            # we want to filter the vtable refs down to just the call
+            # to the base ctor that takes the vtable as a parameter
             for idx, r in enumerate(vtable_refs):
                 if not r.function.is_call_instruction(r.address):
                     vtable_refs.remove(r)
@@ -373,7 +377,11 @@ class PacketHandlers:
             if len(vtable_refs) != 1:
                 raise Exception("Expected 1 reference to vtable of PacketHandler but got " + str(len(vtable_refs)))
 
-            base_ctor_call_insn: LowLevelILCall = vtable_refs[0].function.get_llil_at(vtable_refs[0].address)
+            the_insn = vtable_refs[0].function.get_llil_at(vtable_refs[0].address)
+            if not isinstance(the_insn, LowLevelILCall):
+                raise Exception("Unexpected instruction type! {} - {}".format(the_insn, type(the_insn)))
+
+            base_ctor_call_insn: LowLevelILCall = the_insn
             if isinstance(base_ctor_call_insn.dest.value, Undetermined):
                 raise Exception(
                     "Unable to determine dest address of call to jag::PacketHandler::ctor. Script might need updating")

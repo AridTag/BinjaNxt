@@ -11,13 +11,14 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with BinjaNxt.
 If not, see <https://www.gnu.org/licenses/>.
 """
-
-from BinjaNxt.NxtUtils import *
-from BinjaNxt.PacketHandler import *
-from BinjaNxt.JagTypes import *
-#from JagTypes import *
-#from PacketHandler import *
-#from NxtUtils import *
+from binaryninja import *
+from binaryninja.log import log_error, log_warn, log_debug, log_info
+#from BinjaNxt.NxtUtils import *
+#from BinjaNxt.PacketHandler import PacketHandlers
+#from BinjaNxt.JagTypes import *
+from JagTypes import *
+from PacketHandler import PacketHandlers
+from NxtUtils import *
 
 
 class Nxt:
@@ -148,8 +149,8 @@ class Nxt:
                 if len(refs) < ref_threshold:
                     continue
 
-                client_struct_size = llil.get_reg_value(RegisterName('rcx')).value  # num_bytes
-                client_struct_alignment = llil.get_reg_value(RegisterName('rdx')).value  # alignment
+                client_struct_size = llil.get_reg_value(RCX).value  # num_bytes
+                client_struct_alignment = llil.get_reg_value(RDX).value  # alignment
                 # 0x633d0 <-- size in version 921-4
                 client_expected_size = 0x633e0  # size as of jag::Client version 922-4
                 if client_struct_size != client_expected_size:
@@ -229,11 +230,13 @@ class Nxt:
             elif insn.operation == LowLevelILOperation.LLIL_STORE:
                 # Encountered a store. Look for a destination of ConstPtr and src of a known client addr register
                 store_insn: LowLevelILStore = insn
-                if isinstance(store_insn.dest, LowLevelILConstPtr):
-                    dest_insn: LowLevelILConstPtr = store_insn.dest
+                dest_insn: LowLevelILInstruction = store_insn.dest
+                if isinstance(dest_insn, LowLevelILConstPtr):
+                    dest_insn: LowLevelILConstPtr = dest_insn
                     dest_addr = dest_insn.constant
-                    if isinstance(store_insn.src, LowLevelILReg):
-                        reg_insn: LowLevelILReg = store_insn.src
+                    src_insn = store_insn.src
+                    if isinstance(src_insn, LowLevelILReg):
+                        reg_insn: LowLevelILReg = src_insn
                         if reg_insn.src.name in current_addr_reg_locations:
                             if dest_addr not in current_data_locations:
                                 current_data_locations.append(dest_addr)
@@ -245,8 +248,9 @@ class Nxt:
 
                 dest_to_add = None
                 src_reg = None
-                if isinstance(set_insn.src, LowLevelILReg):
-                    reg_insn: LowLevelILReg = set_insn.src
+                src_insn = set_insn.src
+                if isinstance(src_insn, LowLevelILReg):
+                    reg_insn: LowLevelILReg = src_insn
                     src_reg = reg_insn.src.name
                     if str(src_reg) in current_addr_reg_locations:
                         dest_to_add = set_insn.dest.name
@@ -401,8 +405,9 @@ class Nxt:
             src = set_reg.src
             if isinstance(src, LowLevelILLoad):
                 load: LowLevelILLoad = src
-                if isinstance(load.operands[0], LowLevelILConstPtr):
-                    ptr: LowLevelILConstPtr = load.operands[0]
+                operand = load.operands[0]
+                if isinstance(operand, LowLevelILConstPtr):
+                    ptr: LowLevelILConstPtr = operand
                     return ptr.constant
 
             log_error('s_CurrentTimeMs doesn\'t appear to be coming from a static address. Script needs updating!')
