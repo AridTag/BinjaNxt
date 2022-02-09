@@ -13,13 +13,13 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 from binaryninja import *
 
-#from BinjaNxt.NxtUtils import *
-#from BinjaNxt.PacketHandlerInfo import *
-#from BinjaNxt.JagTypes import *
+from BinjaNxt.NxtUtils import *
+from BinjaNxt.PacketHandlerInfo import *
+from BinjaNxt.JagTypes import *
 
-from JagTypes import *
-from NxtUtils import *
-from PacketHandlerInfo import *
+#from JagTypes import *
+#from NxtUtils import *
+#from PacketHandlerInfo import *
 
 
 class PacketHandlers:
@@ -79,7 +79,28 @@ class PacketHandlers:
                         print('no func?')
                     else:
                         rename_func(handle_packet_func, '{}::HandlePacket'.format(qualified_handler_name))
-                        change_var(handle_packet_func.parameter_vars[1], 'pPacket', Type.pointer(bv.arch, self.jag_types.packet))
+                        if len(handle_packet_func.parameter_vars) < 4:
+                            # TODO: As of 922-4 the handlers should have 4 arguments.
+                            #       The way Binja is creating functions there are functions that just consist of a jmp
+                            #       to another function. Some of these are not getting the correct number of arguments
+                            #       or any arguments at all.
+                            #       For now we are going to try setting the found function to have the correct signature
+                            #       update analysis and then check to make sure we have arguments where we want them
+                            #       before we try and set types or names
+                            log_warn('Expected 4 parameters for HandlePacket function. @ {:#x} \'correcting\' the signature'
+                                     .format(handle_packet_func.start))
+                            handle_packet_func.set_auto_parameter_vars(ParameterVariables([
+                                # TODO: Where the hell am i supposed to get the storage values from?
+                                #       I'm pretty sure they are just a numeric representation of RCX, RDX etc...
+                                Variable(handle_packet_func, VariableSourceType.RegisterVariableSourceType, 0, 67),
+                                Variable(handle_packet_func, VariableSourceType.RegisterVariableSourceType, 1, 68),
+                                Variable(handle_packet_func, VariableSourceType.RegisterVariableSourceType, 2, 74),
+                                Variable(handle_packet_func, VariableSourceType.RegisterVariableSourceType, 3, 75)
+                            ]))
+                            bv.update_analysis_and_wait()
+
+                        if len(handle_packet_func.parameter_vars) >= 2:
+                            change_var(handle_packet_func.parameter_vars[1], 'pPacket', Type.pointer(bv.arch, self.jag_types.packet))
 
         print('Handlers: [')
         print(*self.server_packet_handlers, sep=',\n    ')

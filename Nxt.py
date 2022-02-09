@@ -23,7 +23,7 @@ from BinjaNxt.JagTypes import *
 
 class Nxt:
     jag_types: JagTypes = JagTypes()
-    packet_handlers: PacketHandlers
+    packet_handlers: PacketHandlers = None
     current_time_ms_addr: Optional[int] = None
     checked_alloc_addr: Optional[int] = None
     connection_manager_ctor_addr: Optional[int] = None
@@ -50,7 +50,7 @@ class Nxt:
         return True
 
     def define_types(self, bv: BinaryView):
-        self.jag_types.isaac = Type.structure(members=[
+        t_isaac = Type.structure(members=[
             (Type.int(4, False), 'valuesRemaining'),
             (Type.array(Type.int(4, False), 256), 'rand_results'),
             (Type.array(Type.int(4, False), 256), 'mm'),
@@ -58,18 +58,21 @@ class Nxt:
             (Type.int(4), 'bb'),
             (Type.int(4), 'cc')
         ], packed=True)
-        bv.define_user_type(self.jag_types.isaac_name, self.jag_types.isaac)
+        bv.define_user_type(self.jag_types.isaac_name, t_isaac)
+        self.jag_types.isaac = bv.get_type_by_name(self.jag_types.isaac_name)
 
-        self.jag_types.heap_interface = Type.structure(packed=True)
-        bv.define_user_type(self.jag_types.heap_interface_name, self.jag_types.heap_interface)
+        t_heap_interface = Type.structure(packed=True)
+        bv.define_user_type(self.jag_types.heap_interface_name, t_heap_interface)
+        self.jag_types.heap_interface = bv.get_type_by_name(self.jag_types.heap_interface_name)
 
-        self.jag_types.client_prot = Type.structure(members=[
+        t_client_prot = Type.structure(members=[
             (Type.int(4, False), 'opcode'),
             (Type.int(4), 'size')
         ], packed=True)
-        bv.define_user_type(self.jag_types.client_prot_name, self.jag_types.client_prot)
+        bv.define_user_type(self.jag_types.client_prot_name, t_client_prot)
+        self.jag_types.client_prot = bv.get_type_by_name(self.jag_types.client_prot_name)
 
-        self.jag_types.packet = Type.structure(members=[
+        t_packet = Type.structure(members=[
             (Type.int(8), 'unk1'),
             (Type.int(8), 'capacity'),
             (Type.pointer(bv.arch, Type.int(1, False)), 'buffer'),
@@ -77,7 +80,8 @@ class Nxt:
             (Type.int(4), 'unk2'),
             (Type.int(8), 'unk3')
         ], packed=True)
-        bv.define_user_type(self.jag_types.packet_name, self.jag_types.packet)
+        bv.define_user_type(self.jag_types.packet_name, t_packet)
+        self.jag_types.packet = bv.get_type_by_name(self.jag_types.packet_name)
 
     def refactor_app_init(self, bv: BinaryView) -> bool:
         main_init = self.find_main_init(bv)
