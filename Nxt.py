@@ -16,9 +16,11 @@ from binaryninja.log import log_error, log_warn, log_debug, log_info
 from BinjaNxt.NxtUtils import *
 from BinjaNxt.PacketHandler import PacketHandlers
 from BinjaNxt.JagTypes import *
-#from JagTypes import *
-#from PacketHandler import PacketHandlers
-#from NxtUtils import *
+
+
+# from JagTypes import *
+# from PacketHandler import PacketHandlers
+# from NxtUtils import *
 
 
 class Nxt:
@@ -97,9 +99,9 @@ class Nxt:
             logmsg: str
             if len(self.static_client_ptrs) == 1:
                 logmsg = 'Found jag::Client* jag::s_pClient @ {:#x}'.format(self.static_client_ptrs[0])
-                bv.define_user_data_var(self.static_client_ptrs[0],
-                                        Type.pointer(bv.arch, self.jag_types.client),
-                                        'jag::s_pClient')
+                bv.define_data_var(self.static_client_ptrs[0],
+                                   Type.pointer(bv.arch, self.jag_types.client),
+                                   'jag::s_pClient')
             else:
                 logmsg = 'Found multiple jag::Client* jag::s_pClient'
                 for idx, ptr in enumerate(self.static_client_ptrs):
@@ -108,9 +110,9 @@ class Nxt:
                     if idx > 0:
                         name += str(idx)
 
-                    bv.define_user_data_var(self.static_client_ptrs[0],
-                                            Type.pointer(bv.arch, self.jag_types.client),
-                                            name)
+                    bv.define_data_var(self.static_client_ptrs[0],
+                                       Type.pointer(bv.arch, self.jag_types.client),
+                                       name)
 
             log_info(logmsg)
 
@@ -139,6 +141,16 @@ class Nxt:
         return target_func
 
     def find_alloc_and_client_ctor(self, bv: BinaryView, main_init: Function) -> bool:
+        """
+        Searches through jag::App::MainInit until encountering a call to a function that has a very large number of refs
+        that function will be jag::HeapInterface::CheckedAlloc
+
+        The first call (as of 922-4) to CheckedAlloc will be allocating a large block of memory. This is the jag::Client
+        The next call after CheckedAlloc will be to the jag::Client::ctor
+        @param bv:
+        @param main_init:
+        @return:
+        """
         ref_threshold = 1500
         found_alloc = False
         client_struct_size = 0
@@ -187,7 +199,36 @@ class Nxt:
                 change_var(client_ctor.parameter_vars[0], 'pClient',
                            Type.pointer(bv.arch, self.jag_types.client))
                 break
-        return True
+
+        if self.client_ctor_addr is not None:
+            # Search through the HLIL instructions of jag::Client::ctor looking for the vtable assignment
+            client_ctor = bv.get_function_at(self.client_ctor_addr)
+            vtable_assign_insn: Optional[HighLevelILAssign] = None
+            for idx, insn in enumerate(list(client_ctor.hlil.instructions)):
+                if idx >= 4:
+                    log_error('Failed to locate vtable of jag::Client')
+                    break
+
+                if isinstance(insn, HighLevelILAssign):
+                    ass_insn: HighLevelILAssign = insn
+                    dest = ass_insn.dest
+                    if isinstance(dest, HighLevelILDerefField):
+                        field_insn: HighLevelILDerefField = dest
+                        if isinstance(field_insn.src, HighLevelILVar):
+                            n: HighLevelILVar = field_insn.src
+                            if len(n.vars) > 0 and n.vars[0] == client_ctor.parameter_vars[0]:
+                                if field_insn.offset == 0:
+                                    vtable_assign_insn = ass_insn
+                elif vtable_assign_insn is not None:
+                    if isinstance(vtable_assign_insn.src.value, Undetermined):
+                        log_error('Value of jag::Client::vtable is Undetermined')
+                    else:
+                        vtable_addr = vtable_assign_insn.src.value.value
+                        change_comment(bv, vtable_addr, 'start vtable jag::Client')
+                        log_info('Found jag::Client::vtable @ {:#x}'.format(vtable_addr))
+                    break
+
+        return found_alloc and self.jag_types.client is not None
 
     def refactor_static_client_ptr(self, bv: BinaryView) -> bool:
         """
