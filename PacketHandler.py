@@ -13,13 +13,13 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 from binaryninja import *
 
-from BinjaNxt.NxtUtils import *
-from BinjaNxt.PacketHandlerInfo import *
-from BinjaNxt.JagTypes import *
+#from BinjaNxt.NxtUtils import *
+#from BinjaNxt.PacketHandlerInfo import *
+#from BinjaNxt.JagTypes import *
 
-#from JagTypes import *
-#from NxtUtils import *
-#from PacketHandlerInfo import *
+from JagTypes import *
+from NxtUtils import *
+from PacketHandlerInfo import *
 
 
 class PacketHandlers:
@@ -78,8 +78,8 @@ class PacketHandlers:
                         # TODO: Can I create a function? what is a "user" function?
                         print('no func?')
                     else:
-                        rename_func(handle_packet_func,
-                                    '{}::PacketHandler::HandlePacket'.format(qualified_handler_name))
+                        rename_func(handle_packet_func, '{}::HandlePacket'.format(qualified_handler_name))
+                        change_var(handle_packet_func.parameter_vars[1], 'pPacket', Type.pointer(bv.arch, self.jag_types.packet))
 
         print('Handlers: [')
         print(*self.server_packet_handlers, sep=',\n    ')
