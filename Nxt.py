@@ -12,28 +12,25 @@ You should have received a copy of the GNU General Public License along with Bin
 If not, see <https://www.gnu.org/licenses/>.
 """
 from binaryninja import *
-from binaryninja.log import log_error, log_warn, log_debug, log_info
+from binaryninja.log import log_error, log_warn, log_info
 from BinjaNxt.NxtUtils import *
 from BinjaNxt.PacketHandler import PacketHandlers
 from BinjaNxt.JagTypes import *
+from BinjaNxt.NxtAnalysisData import NxtAnalysisData
 
 
-# from JagTypes import *
-# from PacketHandler import PacketHandlers
-# from NxtUtils import *
+#from NxtAnalysisData import NxtAnalysisData
+#from PacketHandler import PacketHandlers
+#from NxtUtils import *
 
 
 class Nxt:
-    jag_types: JagTypes = JagTypes()
-    packet_handlers: PacketHandlers = None
-    current_time_ms_addr: Optional[int] = None
-    checked_alloc_addr: Optional[int] = None
-    connection_manager_ctor_addr: Optional[int] = None
-    client_ctor_addr: Optional[int] = None
-    static_client_ptrs: list[int] = []
+    found_data: NxtAnalysisData
+    packet_handlers: PacketHandlers
 
     def __init__(self):
-        self.packet_handlers = PacketHandlers(self.jag_types)
+        self.found_data = NxtAnalysisData()
+        self.packet_handlers = PacketHandlers(self.found_data)
 
     def run(self, bv: BinaryView) -> bool:
         self.define_types(bv)
@@ -45,7 +42,7 @@ class Nxt:
             log_error('Failed to refactor jag::ConnectionManager')
             return False
 
-        if not self.packet_handlers.run(bv, self.connection_manager_ctor_addr):
+        if not self.packet_handlers.run(bv, self.found_data.connection_manager_ctor_addr):
             log_error('Failed to refactor packets')
             return False
 
@@ -60,19 +57,19 @@ class Nxt:
             (Type.int(4), 'bb'),
             (Type.int(4), 'cc')
         ], packed=True)
-        bv.define_user_type(self.jag_types.isaac_name, t_isaac)
-        self.jag_types.isaac = bv.get_type_by_name(self.jag_types.isaac_name)
+        bv.define_user_type(self.found_data.types.isaac_name, t_isaac)
+        self.found_data.types.isaac = bv.get_type_by_name(self.found_data.types.isaac_name)
 
         t_heap_interface = Type.structure(packed=True)
-        bv.define_user_type(self.jag_types.heap_interface_name, t_heap_interface)
-        self.jag_types.heap_interface = bv.get_type_by_name(self.jag_types.heap_interface_name)
+        bv.define_user_type(self.found_data.types.heap_interface_name, t_heap_interface)
+        self.found_data.types.heap_interface = bv.get_type_by_name(self.found_data.types.heap_interface_name)
 
         t_client_prot = Type.structure(members=[
             (Type.int(4, False), 'opcode'),
             (Type.int(4), 'size')
         ], packed=True)
-        bv.define_user_type(self.jag_types.client_prot_name, t_client_prot)
-        self.jag_types.client_prot = bv.get_type_by_name(self.jag_types.client_prot_name)
+        bv.define_user_type(self.found_data.types.client_prot_name, t_client_prot)
+        self.found_data.types.client_prot = bv.get_type_by_name(self.found_data.types.client_prot_name)
 
         t_packet = Type.structure(members=[
             (Type.int(8), 'unk1'),
@@ -82,8 +79,8 @@ class Nxt:
             (Type.int(4), 'unk2'),
             (Type.int(8), 'unk3')
         ], packed=True)
-        bv.define_user_type(self.jag_types.packet_name, t_packet)
-        self.jag_types.packet = bv.get_type_by_name(self.jag_types.packet_name)
+        bv.define_user_type(self.found_data.types.packet_name, t_packet)
+        self.found_data.types.packet = bv.get_type_by_name(self.found_data.types.packet_name)
 
     def refactor_app_init(self, bv: BinaryView) -> bool:
         main_init = self.find_main_init(bv)
@@ -97,21 +94,21 @@ class Nxt:
 
         if self.refactor_static_client_ptr(bv):
             logmsg: str
-            if len(self.static_client_ptrs) == 1:
-                logmsg = 'Found jag::Client* jag::s_pClient @ {:#x}'.format(self.static_client_ptrs[0])
-                bv.define_data_var(self.static_client_ptrs[0],
-                                   Type.pointer(bv.arch, self.jag_types.client),
+            if len(self.found_data.static_client_ptrs) == 1:
+                logmsg = 'Found jag::Client* jag::s_pClient @ {:#x}'.format(self.found_data.static_client_ptrs[0])
+                bv.define_data_var(self.found_data.static_client_ptrs[0],
+                                   Type.pointer(bv.arch, self.found_data.types.client),
                                    'jag::s_pClient')
             else:
                 logmsg = 'Found multiple jag::Client* jag::s_pClient'
-                for idx, ptr in enumerate(self.static_client_ptrs):
+                for idx, ptr in enumerate(self.found_data.static_client_ptrs):
                     logmsg += '\n    @ {:#x}'.format(ptr)
                     name = 'jag::s_pClient'
                     if idx > 0:
                         name += str(idx)
 
-                    bv.define_data_var(self.static_client_ptrs[0],
-                                       Type.pointer(bv.arch, self.jag_types.client),
+                    bv.define_data_var(self.found_data.static_client_ptrs[0],
+                                       Type.pointer(bv.arch, self.found_data.types.client),
                                        name)
 
             log_info(logmsg)
@@ -167,7 +164,7 @@ class Nxt:
 
                 client_struct_size = llil.get_reg_value(RCX).value  # num_bytes
                 client_struct_alignment = llil.get_reg_value(RDX).value  # alignment
-                # 0x633d0 <-- size in version 921-4
+                #                      0x633d0    size in version 921-4
                 client_expected_size = 0x633e0  # size as of jag::Client version 922-4
                 if client_struct_size != client_expected_size:
                     size_diff = abs(client_struct_size - client_expected_size)
@@ -179,30 +176,30 @@ class Nxt:
 
                 found_alloc = True
                 checked_alloc = bv.get_function_at(dest_addr)
-                self.checked_alloc_addr = checked_alloc.start
-                rename_func(checked_alloc, '{}::CheckedAlloc'.format(self.jag_types.heap_interface_name))
+                self.found_data.checked_alloc_addr = checked_alloc.start
+                rename_func(checked_alloc, '{}::CheckedAlloc'.format(self.found_data.types.heap_interface_name))
                 change_ret_type(checked_alloc, Type.pointer(bv.arch, Type.void()))
                 change_var(checked_alloc.parameter_vars[0], 'num_bytes', Type.int(4))
                 change_var(checked_alloc.parameter_vars[1], 'alignment', Type.int(4))
 
             else:
-                with StructureBuilder.builder(bv, QualifiedName(self.jag_types.client_name)) as client_builder:
+                with StructureBuilder.builder(bv, QualifiedName(self.found_data.types.client_name)) as client_builder:
                     client_builder.packed = True
                     client_builder.alignment = client_struct_alignment
                     client_builder.width = client_struct_size
 
-                self.jag_types.client = bv.get_type_by_name(self.jag_types.client_name)
+                self.found_data.types.client = bv.get_type_by_name(self.found_data.types.client_name)
 
                 client_ctor = bv.get_function_at(dest_addr)
-                self.client_ctor_addr = client_ctor.start
-                rename_func(client_ctor, '{}::ctor'.format(self.jag_types.client_name))
+                self.found_data.client_ctor_addr = client_ctor.start
+                rename_func(client_ctor, '{}::ctor'.format(self.found_data.types.client_name))
                 change_var(client_ctor.parameter_vars[0], 'pClient',
-                           Type.pointer(bv.arch, self.jag_types.client))
+                           Type.pointer(bv.arch, self.found_data.types.client))
                 break
 
-        if self.client_ctor_addr is not None:
+        if self.found_data.client_ctor_addr is not None:
             # Search through the HLIL instructions of jag::Client::ctor looking for the vtable assignment
-            client_ctor = bv.get_function_at(self.client_ctor_addr)
+            client_ctor = bv.get_function_at(self.found_data.client_ctor_addr)
             vtable_assign_insn: Optional[HighLevelILAssign] = None
             for idx, insn in enumerate(list(client_ctor.hlil.instructions)):
                 if idx >= 4:
@@ -228,7 +225,7 @@ class Nxt:
                         log_info('Found jag::Client::vtable @ {:#x}'.format(vtable_addr))
                     break
 
-        return found_alloc and self.jag_types.client is not None
+        return found_alloc and self.found_data.types.client is not None
 
     def refactor_static_client_ptr(self, bv: BinaryView) -> bool:
         """
@@ -236,7 +233,7 @@ class Nxt:
         and label of the data location appropriately
         @param bv: @return: True if found; False otherwise
         """
-        ctor_refs = list(bv.get_code_refs(self.client_ctor_addr))
+        ctor_refs = list(bv.get_code_refs(self.found_data.client_ctor_addr))
         if len(ctor_refs) != 1:
             log_error('Expected 1 ref to jag::Client::ctor but found {}'.format(len(ctor_refs)))
             return False
@@ -320,7 +317,7 @@ class Nxt:
             # as of 922-4 there should only be 1 left over data location. warn if there are more
             log_warn('Found multiple static data locations for jag::Client* s_pClient. Is this correct?')
 
-        self.static_client_ptrs = current_data_locations
+        self.found_data.static_client_ptrs = current_data_locations
         return True
 
     def refactor_connection_manager(self, bv: BinaryView) -> bool:
@@ -385,8 +382,8 @@ class Nxt:
             log_error('Failed to find address of s_CurrentTimeMs')
             return False
 
-        self.current_time_ms_addr = current_time_addr
-        bv.define_user_data_var(self.current_time_ms_addr, Type.int(8, False), 's_CurrentTimeMs')
+        self.found_data.current_time_ms_addr = current_time_addr
+        bv.define_user_data_var(self.found_data.current_time_ms_addr, Type.int(8, False), 's_CurrentTimeMs')
 
         log_info('Determining size of jag::ConnectionManager')
         ctor_refs = list(bv.get_code_refs(ctor.start))
@@ -397,24 +394,24 @@ class Nxt:
         allocation = find_allocation_from_ctor_call(bv,
                                                     list(ctor_refs[0].function.llil_instructions),
                                                     ctor_refs[0].function.get_llil_at(ctor_refs[0].address),
-                                                    self.checked_alloc_addr)
+                                                    self.found_data.checked_alloc_addr)
         if allocation is None:
             log_error('Failed to determine size of jag::ConnectionManager')
             return False
 
-        with StructureBuilder.builder(bv, QualifiedName(self.jag_types.conn_mgr_name)) as builder:
+        with StructureBuilder.builder(bv, QualifiedName(self.found_data.types.conn_mgr_name)) as builder:
             builder.packed = True
             builder.width = allocation.size
             builder.alignment = allocation.alignment
 
-        self.jag_types.conn_mgr = bv.get_type_by_name(self.jag_types.conn_mgr_name)
+        self.found_data.types.conn_mgr = bv.get_type_by_name(self.found_data.types.conn_mgr_name)
 
-        self.connection_manager_ctor_addr = ctor.start
-        log_info('Found jag::ConnectionManager::ctor at {:#x}'.format(self.connection_manager_ctor_addr))
+        self.found_data.connection_manager_ctor_addr = ctor.start
+        log_info('Found jag::ConnectionManager::ctor at {:#x}'.format(self.found_data.connection_manager_ctor_addr))
 
-        rename_func(ctor, '{}::ctor'.format(self.jag_types.conn_mgr_name))
-        change_var_type(ctor.parameter_vars[0], Type.pointer(bv.arch, self.jag_types.conn_mgr))
-        change_var_type(ctor.parameter_vars[1], Type.pointer(bv.arch, self.jag_types.client))
+        rename_func(ctor, '{}::ctor'.format(self.found_data.types.conn_mgr_name))
+        change_var_type(ctor.parameter_vars[0], Type.pointer(bv.arch, self.found_data.types.conn_mgr))
+        change_var_type(ctor.parameter_vars[1], Type.pointer(bv.arch, self.found_data.types.client))
         return True
 
     def find_current_time_addr(self,

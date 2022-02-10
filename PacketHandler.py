@@ -16,30 +16,32 @@ from binaryninja import *
 from BinjaNxt.NxtUtils import *
 from BinjaNxt.PacketHandlerInfo import *
 from BinjaNxt.JagTypes import *
+from BinjaNxt.NxtAnalysisData import NxtAnalysisData
 
+
+#from NxtAnalysisData import NxtAnalysisData
 #from JagTypes import *
 #from NxtUtils import *
 #from PacketHandlerInfo import *
 
 
 class PacketHandlers:
-    jag_types: JagTypes
-    register_packet_handler_addr: Optional[int] = None
+    found_data: NxtAnalysisData
 
-    EXPECTED_NUM_SERVER_HANDLERS: int = 195
-    server_packet_handlers: list[Optional[PacketHandlerInfo]] = [None] * EXPECTED_NUM_SERVER_HANDLERS
+    __EXPECTED_NUM_SERVER_HANDLERS: int = 195
 
     __server_packet_name_offs = 0
 
-    def __init__(self, jag_types: JagTypes):
-        self.jag_types = jag_types
+    def __init__(self, found_data: NxtAnalysisData):
+        self.found_data = found_data
+        self.found_data.packet_handlers = [None] * self.__EXPECTED_NUM_SERVER_HANDLERS
 
     def run(self, bv: BinaryView, connection_manager_ctor_addr: int) -> bool:
         packet_handler_ctor = self.find_packet_handler_ctor_and_register(bv, connection_manager_ctor_addr)
         if packet_handler_ctor is None:
             return False
 
-        print('Found RegisterPacketHandler @ ' + hex(self.register_packet_handler_addr))
+        print('Found RegisterPacketHandler @ ' + hex(self.found_data.register_packet_handler_addr))
         print('Found jag::PacketHandler::ctor @ ' + packet_handler_ctor.name)
 
         if not self.__initialize_server_packet_infos(bv, packet_handler_ctor):
@@ -50,7 +52,7 @@ class PacketHandlers:
             print('Failed to initialize PacketHandler names')
             return False
 
-        for handler in self.server_packet_handlers:
+        for handler in self.found_data.packet_handlers:
             if handler.name == "":
                 continue
 
@@ -100,10 +102,10 @@ class PacketHandlers:
                             bv.update_analysis_and_wait()
 
                         if len(handle_packet_func.parameter_vars) >= 2:
-                            change_var(handle_packet_func.parameter_vars[1], 'pPacket', Type.pointer(bv.arch, self.jag_types.packet))
+                            change_var(handle_packet_func.parameter_vars[1], 'pPacket', Type.pointer(bv.arch, self.found_data.types.packet))
 
         print('Handlers: [')
-        print(*self.server_packet_handlers, sep=',\n    ')
+        print(*self.found_data.packet_handlers, sep=',\n    ')
         print(']')
 
         return True
@@ -120,7 +122,7 @@ class PacketHandlers:
                 continue
             clean_name = clean_name + s.title()
 
-        fqn = "jag{}PacketHandlers{}{}".format(self.jag_types.namespace_sep, self.jag_types.namespace_sep, clean_name)
+        fqn = "jag{}PacketHandlers{}{}".format(self.found_data.types.namespace_sep, self.found_data.types.namespace_sep, clean_name)
         return fqn, clean_name
 
     def __initialize_server_packet_infos(self, bv: BinaryView, packet_handler_ctor: Function) -> bool:
@@ -148,11 +150,11 @@ class PacketHandlers:
             ctor = ref.function
 
             # If jagex decides to add more than the currently known amount of packets (195)
-            if opcode > len(self.server_packet_handlers) - 1:
-                for i in range(0, (opcode - len(self.server_packet_handlers))):
-                    self.server_packet_handlers.append(None)
+            if opcode > len(self.found_data.packet_handlers) - 1:
+                for i in range(0, (opcode - len(self.found_data.packet_handlers))):
+                    self.found_data.packet_handlers.append(None)
 
-            self.server_packet_handlers[opcode] = PacketHandlerInfo(opcode, size, addr, ctor.start)
+            self.found_data.packet_handlers[opcode] = PacketHandlerInfo(opcode, size, addr, ctor.start)
             num_valid += 1
 
         print('Found {} valid packet handlers of {} possible'.format(num_valid, len(ctor_refs)))
@@ -201,7 +203,7 @@ class PacketHandlers:
                                                     called_func: Function,
                                                     visited_func_addrs: list[int],
                                                     parent_call_ins: Optional[LowLevelILInstruction] = None):
-        if called_func.start == self.register_packet_handler_addr:
+        if called_func.start == self.found_data.register_packet_handler_addr:
             rcx = call_insn.get_reg_value(RCX)
             rdx = call_insn.get_reg_value(RDX)
             if isinstance(rcx, Undetermined):
@@ -253,8 +255,8 @@ class PacketHandlers:
             if not valid_call:
                 continue
 
-            isregister = True if self.register_packet_handler_addr is not None \
-                and dest_addr == self.register_packet_handler_addr else False
+            isregister = True if self.found_data.register_packet_handler_addr is not None \
+                and dest_addr == self.found_data.register_packet_handler_addr else False
 
             if dest_addr not in visited_func_addrs or isregister:
                 if not isregister:
@@ -347,7 +349,7 @@ class PacketHandlers:
         return vtable_addr
 
     def packet_handler_from_addr(self, addr: int) -> Optional[PacketHandlerInfo]:
-        for handler in self.server_packet_handlers:
+        for handler in self.found_data.packet_handlers:
             if handler is not None and handler.addr == addr:
                 return handler
 
@@ -391,9 +393,9 @@ class PacketHandlers:
                                                 call_insn: LowLevelILInstruction,
                                                 called_func: Function,
                                                 visited_func_addrs: list[int]) -> Optional[Function]:
-        if self.register_packet_handler_addr is None and len(called_func.callers) > 200:
-            self.register_packet_handler_addr = called_func.start
-            visited_func_addrs.remove(self.register_packet_handler_addr)
+        if self.found_data.register_packet_handler_addr is None and len(called_func.callers) > 200:
+            self.found_data.register_packet_handler_addr = called_func.start
+            visited_func_addrs.remove(self.found_data.register_packet_handler_addr)
 
             rdx = call_insn.get_reg_value(RDX)
             if isinstance(rdx, Undetermined):
@@ -432,8 +434,8 @@ class PacketHandlers:
             if not valid_call:
                 continue
 
-            isregister = True if self.register_packet_handler_addr is not None \
-                and dest_addr == self.register_packet_handler_addr else False
+            isregister = True if self.found_data.register_packet_handler_addr is not None \
+                and dest_addr == self.found_data.register_packet_handler_addr else False
 
             if dest_addr not in visited_func_addrs or isregister:
                 if not isregister:
