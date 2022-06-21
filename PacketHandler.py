@@ -41,15 +41,15 @@ class PacketHandlers:
         if packet_handler_ctor is None:
             return False
 
-        print('Found RegisterPacketHandler @ ' + hex(self.found_data.register_packet_handler_addr))
-        print('Found jag::PacketHandler::ctor @ ' + packet_handler_ctor.name)
+        log_info('Found RegisterPacketHandler @ ' + hex(self.found_data.register_packet_handler_addr))
+        log_info('Found jag::PacketHandler::ctor @ ' + packet_handler_ctor.name)
 
         if not self.__initialize_server_packet_infos(bv, packet_handler_ctor):
-            print('Failed to initialize PacketHandler info')
+            log_error('Failed to initialize PacketHandler info')
             return False
 
         if not self.__initialize_server_packet_handler_names(bv, connection_manager_ctor_addr):
-            print('Failed to initialize PacketHandler names')
+            log_error('Failed to initialize PacketHandler names')
             return False
 
         for handler in self.found_data.packet_handlers:
@@ -70,7 +70,7 @@ class PacketHandlers:
                 except ValueError:
                     # TODO: As of version 922-4 there is one unhandled case with IfSetPlayerHeadIgnoreWorn
                     # See: corresponding todo in __find_packet_handler_vtable
-                    print(handler.name + ' - ' + str(handler.opcode) + ', ' + hex(handler.vtable))
+                    log_error('vtable issue with ' + handler.name + ' - ' + str(handler.opcode) + ', ' + hex(handler.vtable))
                     handler.vtable = None
                     handle_packet_addr = None
 
@@ -81,25 +81,6 @@ class PacketHandlers:
                         print('no func?')
                     else:
                         rename_func(handle_packet_func, '{}::HandlePacket'.format(qualified_handler_name))
-                        if len(handle_packet_func.parameter_vars) < 4:
-                            # TODO: As of 922-4 the handlers should have 4 arguments.
-                            #       The way Binja is creating functions there are functions that just consist of a jmp
-                            #       to another function. Some of these are not getting the correct number of arguments
-                            #       or any arguments at all.
-                            #       For now we are going to try setting the found function to have the correct signature
-                            #       update analysis and then check to make sure we have arguments where we want them
-                            #       before we try and set types or names
-                            log_warn('Expected 4 parameters for HandlePacket function. @ {:#x} \'correcting\' the signature'
-                                     .format(handle_packet_func.start))
-                            handle_packet_func.set_auto_parameter_vars(ParameterVariables([
-                                # TODO: Where the hell am i supposed to get the storage values from?
-                                #       I'm pretty sure they are just a numeric representation of RCX, RDX etc...
-                                Variable(handle_packet_func, VariableSourceType.RegisterVariableSourceType, 0, 67),
-                                Variable(handle_packet_func, VariableSourceType.RegisterVariableSourceType, 1, 68),
-                                Variable(handle_packet_func, VariableSourceType.RegisterVariableSourceType, 2, 74),
-                                Variable(handle_packet_func, VariableSourceType.RegisterVariableSourceType, 3, 75)
-                            ]))
-                            bv.update_analysis_and_wait()
 
                         if len(handle_packet_func.parameter_vars) >= 2:
                             change_var(handle_packet_func.parameter_vars[1], 'pPacket', Type.pointer(bv.arch, self.found_data.types.packet))
@@ -122,7 +103,7 @@ class PacketHandlers:
                 continue
             clean_name = clean_name + s.title()
 
-        fqn = "jag{}PacketHandlers{}{}".format(self.found_data.types.namespace_sep, self.found_data.types.namespace_sep, clean_name)
+        fqn = "jag::PacketHandlers::{}".format(clean_name)
         return fqn, clean_name
 
     def __initialize_server_packet_infos(self, bv: BinaryView, packet_handler_ctor: Function) -> bool:
@@ -157,7 +138,7 @@ class PacketHandlers:
             self.found_data.packet_handlers[opcode] = PacketHandlerInfo(opcode, size, addr, ctor.start)
             num_valid += 1
 
-        print('Found {} valid packet handlers of {} possible'.format(num_valid, len(ctor_refs)))
+        log_info('Found {} valid packet handlers of {} possible'.format(num_valid, len(ctor_refs)))
         if num_valid != len(ctor_refs):
             return False
 

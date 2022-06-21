@@ -256,11 +256,11 @@ class Nxt:
         # the return value of jag::Client::ctor is the client address.
         # we need to track where the address stored in RAX goes
         # we expect to see the address get stored in 1 or more data locations within the next few instructions
-        # we are going to track where the value of rax goes through the rest of the function. If we encountere an
+        # we are going to track where the value of rax goes through the rest of the function. If we encounter an
         # instruction that we can't guarantee hasn't clobbered the register values, we clear the list of registers the
         # address is known to exist in.
         # While going through the instructions we will specifically look for stores with a destination of ConstPtr
-        # by the time we reach the end of the function there should only be 1 data location that stil
+        # by the time we reach the end of the function there should only be 1 data location that still
         # contains the address of the client
         current_addr_reg_locations: list[RegisterName] = ['rax']
         current_data_locations: list[int] = []
@@ -379,11 +379,11 @@ class Nxt:
 
         current_time_addr = self.find_current_time_addr(insn_using_current_time, ctor_instructions)
         if current_time_addr is None:
-            log_error('Failed to find address of s_CurrentTimeMs')
+            log_error('Failed to find address of jag::FrameTime::m_CurrentTimeMS')
             return False
 
         self.found_data.current_time_ms_addr = current_time_addr
-        bv.define_user_data_var(self.found_data.current_time_ms_addr, Type.int(8, False), 's_CurrentTimeMs')
+        bv.define_user_data_var(self.found_data.current_time_ms_addr, Type.int(8, False), self.found_data.types.current_time_ms_name)
 
         log_info('Determining size of jag::ConnectionManager')
         ctor_refs = list(bv.get_code_refs(ctor.start))
@@ -418,12 +418,12 @@ class Nxt:
                                insn_using_current_time: LowLevelILInstruction,
                                ctor_instructions: list[LowLevelILInstruction]) -> Optional[int]:
         """
-        In order to get the data address for s_CurrentTimeMs we need to figure out the register that the current time
+        In order to get the data address for jag::FrameTime::m_CurrentTimeMS we need to figure out the register that the current time
         value is stored in then we need to move backwards from insn_using_current_time to find the assignment to that
         register
         @param insn_using_current_time:
         @param ctor_instructions:
-        @return: The address of s_CurrentTimeMs or None
+        @return: The address of jag::FrameTime::m_CurrentTimeMS or None
         """
         reg_name: Optional[RegisterName] = None
         value_expr = insn_using_current_time.operands[1]
@@ -433,7 +433,7 @@ class Nxt:
                 reg_name = reg.src.name
 
         if reg_name is None:
-            log_error('s_CurrentTimeMs doesn\'t appear to be coming from a register. Script needs updating!')
+            log_error('jag::FrameTime::m_CurrentTimeMS doesn\'t appear to be coming from a register. Script needs updating!')
             return None
 
         idx = find_instruction_index(ctor_instructions, insn_using_current_time)
@@ -455,7 +455,7 @@ class Nxt:
                     ptr: LowLevelILConstPtr = operand
                     return ptr.constant
 
-            log_error('s_CurrentTimeMs doesn\'t appear to be coming from a static address. Script needs updating!')
+            log_error('jag::FrameTime::m_CurrentTimeMS doesn\'t appear to be coming from a static address. Script needs updating!')
             break
 
         return None
