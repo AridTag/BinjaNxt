@@ -13,7 +13,7 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 from typing import Optional
 
-from binaryninja import Function, Type, Undetermined, Variable, BinaryView, RegisterName
+from binaryninja import Function, Type, Undetermined, Variable, BinaryView, RegisterName, log_warn
 from binaryninja import LowLevelILInstruction, LowLevelILCall
 
 RCX = RegisterName('rcx')
@@ -33,6 +33,14 @@ class AllocationDetails:
         self.alignment = alignment
 
 
+def ensure_func_analyzed(func: Function) -> bool:
+    if func.analysis_skipped:
+        log_warn('Function {} was not analyzed. Reason {}'.format(func.name, func.analysis_skip_reason))
+        return False
+
+    return True
+
+
 def is_valid_function_call(bv: BinaryView, llil: LowLevelILInstruction) -> (bool, Optional[int]):
     if not isinstance(llil, LowLevelILCall) or len(llil.operands) != 1:
         return False, None
@@ -47,6 +55,20 @@ def is_valid_function_call(bv: BinaryView, llil: LowLevelILInstruction) -> (bool
         return False, None
 
     return True, dest_func.start
+
+
+def get_called_func(bv: BinaryView, llil: LowLevelILCall) -> Optional[Function]:
+    """
+    Gets the function that is being called by the given the instruction
+    @param bv:
+    @param llil:
+    @return: None if the destination can't be determined otherwise the Function that is called.
+    """
+    call_dest = llil.dest.value
+    if isinstance(call_dest, Undetermined):
+        return None
+
+    return bv.get_function_at(call_dest.value)
 
 
 def change_comment(bv: BinaryView, addr: int, desired_comment: str):

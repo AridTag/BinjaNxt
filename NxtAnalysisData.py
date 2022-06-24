@@ -15,4 +15,5 @@ class NxtAnalysisData:
     client_ctor_addr: Optional[int] = None
     register_packet_handler_addr: Optional[int] = None
     packet_handlers: list[PacketHandlerInfo] = []
+    make_client_message_addr: Optional[int] = None
 

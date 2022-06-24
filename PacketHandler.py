@@ -85,11 +85,23 @@ class PacketHandlers:
                         if len(handle_packet_func.parameter_vars) >= 2:
                             change_var(handle_packet_func.parameter_vars[1], 'pPacket', Type.pointer(bv.arch, self.found_data.types.packet))
 
+        self.found_data.packet_handlers.sort(key=lambda x: x.opcode)
         print('Handlers: [')
         print(*self.found_data.packet_handlers, sep=',\n    ')
         print(']')
 
+        self.print_cpp()
+        
         return True
+
+    def print_cpp(self):
+        for handler in self.found_data.packet_handlers:
+            print('{' + '{}, L"{}"'.format(handler.opcode, handler.name) + '},\n')
+
+        print('\n\n')
+
+        for handler in self.found_data.packet_handlers:
+            print('{' + '{}, {}'.format(handler.opcode, handler.size) + '},\n')
 
     def get_qualified_handler_name(self, handler_name: str) -> (str, str):
         """

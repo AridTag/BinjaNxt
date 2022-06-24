@@ -13,8 +13,11 @@ If not, see <https://www.gnu.org/licenses/>.
 """
 from binaryninja import *
 from binaryninja.log import log_error, log_warn, log_info
+from binaryninja.enums import AnalysisSkipReason
+
 from BinjaNxt.NxtUtils import *
 from BinjaNxt.PacketHandler import PacketHandlers
+from BinjaNxt.ClientTcpMessage import ClientTcpMessage
 from BinjaNxt.JagTypes import *
 from BinjaNxt.NxtAnalysisData import NxtAnalysisData
 
@@ -27,12 +30,17 @@ from BinjaNxt.NxtAnalysisData import NxtAnalysisData
 class Nxt:
     found_data: NxtAnalysisData
     packet_handlers: PacketHandlers
+    client_tcp_message: ClientTcpMessage
 
     def __init__(self):
         self.found_data = NxtAnalysisData()
         self.packet_handlers = PacketHandlers(self.found_data)
+        self.client_tcp_message = ClientTcpMessage(self.found_data)
 
     def run(self, bv: BinaryView) -> bool:
+        if bv is None:
+            return False
+
         self.define_types(bv)
         if not self.refactor_app_init(bv):
             log_error('Failed to refactor jag::App::MainInit')
@@ -45,6 +53,8 @@ class Nxt:
         if not self.packet_handlers.run(bv, self.found_data.connection_manager_ctor_addr):
             log_error('Failed to refactor packets')
             return False
+
+        self.client_tcp_message.run(bv)
 
         return True
 
@@ -332,6 +342,10 @@ class Nxt:
             candidate_ins: Optional[LowLevelILInstruction] = None
             is_candidate = False
             is_super_candidate = False
+
+            if not ensure_func_analyzed(func):
+                continue
+
             for insn in func.llil.instructions:
                 if not is_candidate:
                     if insn.operation != LowLevelILOperation.LLIL_SET_REG:
@@ -380,10 +394,9 @@ class Nxt:
         current_time_addr = self.find_current_time_addr(insn_using_current_time, ctor_instructions)
         if current_time_addr is None:
             log_error('Failed to find address of jag::FrameTime::m_CurrentTimeMS')
-            return False
-
-        self.found_data.current_time_ms_addr = current_time_addr
-        bv.define_user_data_var(self.found_data.current_time_ms_addr, Type.int(8, False), self.found_data.types.current_time_ms_name)
+        else:
+            self.found_data.current_time_ms_addr = current_time_addr
+            bv.define_user_data_var(self.found_data.current_time_ms_addr, Type.int(8, False), self.found_data.types.current_time_ms_name)
 
         log_info('Determining size of jag::ConnectionManager')
         ctor_refs = list(bv.get_code_refs(ctor.start))
