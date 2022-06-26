@@ -2,9 +2,11 @@ from binaryninja import *
 
 from BinjaNxt.NxtAnalysisData import NxtAnalysisData
 from BinjaNxt.NxtUtils import  *
+from BinjaNxt.ClientProtInfo import ClientProtInfo
 
 #from NxtAnalysisData import NxtAnalysisData
 #from NxtUtils import *
+#from ClientProtInfo import ClientProtInfo
 
 
 class ClientTcpMessage:
@@ -23,18 +25,14 @@ class ClientTcpMessage:
 
     def run(self, bv: BinaryView) -> bool:
         if self.found_data.current_time_ms_addr is None:
-            log_error('Address of jag::FrameTime::m_CurrentTimeMS is required for ClientProt, RegisterClientProt, MakeClientMessage')
+            log_error('Address of jag::FrameTime::m_CurrentTimeMS is required for MakeClientMessage, ClientProt, RegisterClientProt')
             return False
 
         if not self._refactor_makeclientmessage(bv):
             return False
 
-        fn_register_clientprot = self._refactor_registerclientprot(bv)
-        if fn_register_clientprot is None:
-            log_error("Failed to locate RegisterClientProt")
-        else:
-            num_refs = len(list(bv.get_code_refs(fn_register_clientprot.start)))
-            log_info("Found {} references to jag::RegisterClientProt @ {:#x}".format(num_refs, fn_register_clientprot.start))
+        self._refactor_registerclientprot(bv)
+        self._refactor_clientprots(bv)
 
         return True
 
@@ -98,9 +96,9 @@ class ClientTcpMessage:
         return True
 
 
-    def _refactor_registerclientprot(self, bv: BinaryView) -> Optional[Function]:
+    def _refactor_registerclientprot(self, bv: BinaryView) -> bool:
         if self._addr_some_clientprot is None:
-            return None
+            return False
 
         refs = bv.get_code_refs(self._addr_some_clientprot - 4)
         for ref in refs:
@@ -121,9 +119,82 @@ class ClientTcpMessage:
                 if self.MIN_CLIENT_PROTS < num_register_refs < self.MAX_CLIENT_PROTS:
                     func = bv.get_function_at(ptr.constant)
                     rename_func(func, 'jag::RegisterClientProt')
-                    return func
+                    self.found_data.register_clientprot_addr = func.start
+                    return True
 
-        return None
+        log_error("Failed to locate jag::RegisterClientProt")
+        return False
+
+
+    def _refactor_clientprots(self, bv: BinaryView):
+        references = list(bv.get_code_refs(self.found_data.register_clientprot_addr))
+        log_info("Found {} references to jag::RegisterClientProt".format(len(references)))
+        for ref in references:
+
+            prot_addr: Optional[int] = None
+            opcode: Optional[int] = None
+            size: Optional[int] = None
+
+            skip_reference = False
+            for insn in ref.function.mlil.instructions:
+                if insn.address != ref.address:
+                    continue
+
+                if not isinstance(insn, MediumLevelILCallBase):
+                    skip_reference = True
+                    break
+
+                if isinstance(insn, MediumLevelILTailcall):
+                    tail_call: MediumLevelILTailcall = insn
+                    if not isinstance(tail_call.dest, MediumLevelILConstPtr) or tail_call.dest.constant != self.found_data.register_clientprot_addr:
+                        log_warn('Instruction referencing jag::RegisterClientProt is not calling jag::RegisterClientProt @ {}'
+                                 .format(hex(ref.address)))
+                        skip_reference = True
+                    else:
+                        if len(tail_call.params) != 3:
+                            log_warn('Invalid number of args to jag::RegisterClientProt @ {}'
+                                     .format(hex(ref.address)))
+                            skip_reference = True
+
+                        ptr: MediumLevelILConstPtr = tail_call.params[0]
+                        op: MediumLevelILConst = tail_call.params[1]
+                        size_insn: MediumLevelILConst = tail_call.params[2]
+                        prot_addr = ptr.constant
+                        opcode = op.constant
+                        size = size_insn.constant
+                elif isinstance(insn, MediumLevelILCall):
+                    call: MediumLevelILCall = insn
+                    if not isinstance(call.dest, MediumLevelILConstPtr) or call.dest.constant != self.found_data.register_clientprot_addr:
+                        log_warn('Instruction referencing jag::RegisterClientProt is not calling jag::RegisterClientProt @ {}'
+                                 .format(hex(ref.address)))
+                        skip_reference = True
+                    else:
+                        if len(call.params) != 3:
+                            log_warn('Invalid number of args to jag::RegisterClientProt @ {}'
+                                     .format(hex(ref.address)))
+                            skip_reference = True
+
+                        ptr: MediumLevelILConstPtr = call.params[0]
+                        op: MediumLevelILConst = call.params[1]
+                        size_insn: MediumLevelILConst = call.params[2]
+                        prot_addr = ptr.constant
+                        opcode = op.constant
+                        size = size_insn.constant
+                else:
+                    log_warn("Reference to jag::RegisterClientProt is not a Call @ {}".format(hex(ref.address)))
+                    skip_reference = True
+
+                break
+
+            if skip_reference:
+                continue
+
+            prot: ClientProtInfo = ClientProtInfo(opcode, int32(size), prot_addr, ref.function.start)
+            self.found_data.clientprots.append(prot)
+
+            bv.define_data_var(prot.addr,
+                               Type.pointer(bv.arch, self.found_data.types.client_prot),
+                               'jag::ClientProt::ClientProtOP_{}'.format(prot.opcode))
 
 
     def _find_clientprot_addr(self, func_calling_make_client_message: Function, insn_call_make_client_message: LowLevelILCall) -> Optional[int]:

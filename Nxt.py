@@ -20,6 +20,7 @@ from BinjaNxt.PacketHandler import PacketHandlers
 from BinjaNxt.ClientTcpMessage import ClientTcpMessage
 from BinjaNxt.JagTypes import *
 from BinjaNxt.NxtAnalysisData import NxtAnalysisData
+from BinjaNxt.ClientProtInfo import ClientProtInfo
 
 
 #from NxtAnalysisData import NxtAnalysisData
@@ -44,17 +45,19 @@ class Nxt:
         self.define_types(bv)
         if not self.refactor_app_init(bv):
             log_error('Failed to refactor jag::App::MainInit')
-            return False
 
         if not self.refactor_connection_manager(bv):
             log_error('Failed to refactor jag::ConnectionManager')
-            return False
 
         if not self.packet_handlers.run(bv, self.found_data.connection_manager_ctor_addr):
             log_error('Failed to refactor packets')
-            return False
 
         self.client_tcp_message.run(bv)
+
+        self.found_data.clientprots.sort(key=lambda x: x.opcode)
+        print('ClientProts: [')
+        print(*self.found_data.clientprots, sep=',\n')
+        print(']')
 
         return True
 

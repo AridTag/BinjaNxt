@@ -1,6 +1,7 @@
 from typing import Optional, TypedDict
 from BinjaNxt.JagTypes import JagTypes
 from BinjaNxt.PacketHandlerInfo import PacketHandlerInfo
+from BinjaNxt.ClientProtInfo import ClientProtInfo
 
 #from JagTypes import JagTypes
 #from PacketHandlerInfo import PacketHandlerInfo
@@ -16,4 +17,6 @@ class NxtAnalysisData:
     register_packet_handler_addr: Optional[int] = None
     packet_handlers: list[PacketHandlerInfo] = []
     make_client_message_addr: Optional[int] = None
+    register_clientprot_addr: Optional[int] = None
+    clientprots: list[ClientProtInfo] = []
 
