@@ -54,12 +54,9 @@ class Nxt:
 
         self.client_tcp_message.run(bv)
 
-        self.found_data.clientprots.sort(key=lambda x: x.opcode)
-        print('ClientProts: [')
-        print(*self.found_data.clientprots, sep=',\n')
-        print(']')
-
+        self.found_data.print_info()
         return True
+
 
     def define_types(self, bv: BinaryView):
         t_isaac = Type.structure(members=[
