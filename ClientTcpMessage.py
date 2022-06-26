@@ -119,6 +119,10 @@ class ClientTcpMessage:
                 if self.MIN_CLIENT_PROTS < num_register_refs < self.MAX_CLIENT_PROTS:
                     func = bv.get_function_at(ptr.constant)
                     rename_func(func, 'jag::RegisterClientProt')
+                    if len(func.parameter_vars) == 3:
+                        change_var(func.parameter_vars[0], 'pClientProt', Type.pointer(bv.arch, self.found_data.types.client_prot))
+                        change_var(func.parameter_vars[1], 'opCode', Type.int(4, False))
+                        change_var(func.parameter_vars[2], 'size', Type.int(4))
                     self.found_data.register_clientprot_addr = func.start
                     return True
 
