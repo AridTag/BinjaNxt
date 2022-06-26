@@ -193,7 +193,7 @@ class ClientTcpMessage:
             self.found_data.clientprots.append(prot)
 
             bv.define_data_var(prot.addr,
-                               Type.pointer(bv.arch, self.found_data.types.client_prot),
+                               self.found_data.types.client_prot,
                                'jag::ClientProt::ClientProtOP_{}'.format(prot.opcode))
 
 
