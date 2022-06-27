@@ -20,5 +20,11 @@ class JagTypes:
     client_prot_name = 'jag::ClientProt'
     client_prot: Optional[Type] = None
 
+    server_prot_name = 'jag::ServerProt'
+    server_prot: Optional[Type] = None
+
+    packet_handler_name = 'jag::PacketHandler'
+    packet_handler: Optional[Type] = None
+
     packet_name = 'jag::Packet'
     packet: Optional[Type] = None

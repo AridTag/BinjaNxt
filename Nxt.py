@@ -81,6 +81,20 @@ class Nxt:
         bv.define_user_type(self.found_data.types.client_prot_name, t_client_prot)
         self.found_data.types.client_prot = bv.get_type_by_name(self.found_data.types.client_prot_name)
 
+        t_server_prot = Type.structure(members=[
+            (Type.int(4, False), 'opcode'),
+            (Type.int(4), 'size')
+        ], packed=True)
+        bv.define_user_type(self.found_data.types.server_prot_name, t_server_prot)
+        self.found_data.types.server_prot = bv.get_type_by_name(self.found_data.types.server_prot_name)
+
+        t_packethandler_builder = Type.structure(members=[
+            (Type.pointer(bv.arch, Type.void()), 'vtable')
+        ], packed=True).mutable_copy()
+        t_packethandler_builder.width = 0x48
+        bv.define_user_type(self.found_data.types.packet_handler_name, t_packethandler_builder.immutable_copy())
+        self.found_data.types.packet_handler = bv.get_type_by_name(self.found_data.types.packet_handler_name)
+
         t_packet = Type.structure(members=[
             (Type.int(8), 'unk1'),
             (Type.int(8), 'capacity'),

@@ -42,7 +42,10 @@ class PacketHandlers:
             return False
 
         log_info('Found RegisterPacketHandler @ ' + hex(self.found_data.register_packet_handler_addr))
+        rename_func(bv.get_function_at(self.found_data.register_packet_handler_addr), 'jag::RegisterPacketHandler')
+
         log_info('Found jag::PacketHandler::ctor @ ' + packet_handler_ctor.name)
+        rename_func(packet_handler_ctor, 'jag::PacketHandler::ctor')
 
         if not self.__initialize_server_packet_infos(bv, packet_handler_ctor):
             log_error('Failed to initialize PacketHandler info')
@@ -59,6 +62,14 @@ class PacketHandlers:
             qualified_handler_name, clean_name = self.get_qualified_handler_name(handler.name)
             handler_ctor = bv.get_function_at(handler.ctor)
             rename_func(handler_ctor, '{}::ctor'.format(qualified_handler_name))
+
+            bv.define_data_var(handler.addr - 0x8,
+                               self.found_data.types.server_prot,
+                               'jag::ServerProt::{}'.format(handler.name))
+
+            bv.define_data_var(handler.addr,
+                               self.found_data.types.packet_handler,
+                               qualified_handler_name)
 
             if handler.vtable is not None:
                 change_comment(bv, handler.vtable, 'start vtable {}'.format(qualified_handler_name))
