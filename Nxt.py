@@ -23,9 +23,9 @@ from BinjaNxt.NxtAnalysisData import NxtAnalysisData
 from BinjaNxt.ClientProtInfo import ClientProtInfo
 
 
-#from NxtAnalysisData import NxtAnalysisData
-#from PacketHandler import PacketHandlers
-#from NxtUtils import *
+# from NxtAnalysisData import NxtAnalysisData
+# from PacketHandler import PacketHandlers
+# from NxtUtils import *
 
 
 class Nxt:
@@ -42,7 +42,7 @@ class Nxt:
         if bv is None:
             return False
 
-        self.define_types(bv)
+        self.found_data.types.create_types(bv)
         if not self.refactor_app_init(bv):
             log_error('Failed to refactor jag::App::MainInit')
 
@@ -56,55 +56,6 @@ class Nxt:
 
         self.found_data.print_info()
         return True
-
-
-    def define_types(self, bv: BinaryView):
-        t_isaac = Type.structure(members=[
-            (Type.int(4, False), 'valuesRemaining'),
-            (Type.array(Type.int(4, False), 256), 'rand_results'),
-            (Type.array(Type.int(4, False), 256), 'mm'),
-            (Type.int(4), 'aa'),
-            (Type.int(4), 'bb'),
-            (Type.int(4), 'cc')
-        ], packed=True)
-        bv.define_user_type(self.found_data.types.isaac_name, t_isaac)
-        self.found_data.types.isaac = bv.get_type_by_name(self.found_data.types.isaac_name)
-
-        t_heap_interface = Type.structure(packed=True)
-        bv.define_user_type(self.found_data.types.heap_interface_name, t_heap_interface)
-        self.found_data.types.heap_interface = bv.get_type_by_name(self.found_data.types.heap_interface_name)
-
-        t_client_prot = Type.structure(members=[
-            (Type.int(4, False), 'opcode'),
-            (Type.int(4), 'size')
-        ], packed=True)
-        bv.define_user_type(self.found_data.types.client_prot_name, t_client_prot)
-        self.found_data.types.client_prot = bv.get_type_by_name(self.found_data.types.client_prot_name)
-
-        t_server_prot = Type.structure(members=[
-            (Type.int(4, False), 'opcode'),
-            (Type.int(4), 'size')
-        ], packed=True)
-        bv.define_user_type(self.found_data.types.server_prot_name, t_server_prot)
-        self.found_data.types.server_prot = bv.get_type_by_name(self.found_data.types.server_prot_name)
-
-        t_packethandler_builder = Type.structure(members=[
-            (Type.pointer(bv.arch, Type.void()), 'vtable')
-        ], packed=True).mutable_copy()
-        t_packethandler_builder.width = 0x48
-        bv.define_user_type(self.found_data.types.packet_handler_name, t_packethandler_builder.immutable_copy())
-        self.found_data.types.packet_handler = bv.get_type_by_name(self.found_data.types.packet_handler_name)
-
-        t_packet = Type.structure(members=[
-            (Type.int(8), 'unk1'),
-            (Type.int(8), 'capacity'),
-            (Type.pointer(bv.arch, Type.int(1, False)), 'buffer'),
-            (Type.int(8), 'offset'),
-            (Type.int(4), 'unk2'),
-            (Type.int(8), 'unk3')
-        ], packed=True)
-        bv.define_user_type(self.found_data.types.packet_name, t_packet)
-        self.found_data.types.packet = bv.get_type_by_name(self.found_data.types.packet_name)
 
     def refactor_app_init(self, bv: BinaryView) -> bool:
         main_init = self.find_main_init(bv)
@@ -410,7 +361,8 @@ class Nxt:
             log_error('Failed to find address of jag::FrameTime::m_CurrentTimeMS')
         else:
             self.found_data.current_time_ms_addr = current_time_addr
-            bv.define_user_data_var(self.found_data.current_time_ms_addr, Type.int(8, False), self.found_data.types.current_time_ms_name)
+            bv.define_user_data_var(self.found_data.current_time_ms_addr, Type.int(8, False),
+                                    self.found_data.types.current_time_ms_name)
 
         log_info('Determining size of jag::ConnectionManager')
         ctor_refs = list(bv.get_code_refs(ctor.start))
@@ -460,7 +412,8 @@ class Nxt:
                 reg_name = reg.src.name
 
         if reg_name is None:
-            log_error('jag::FrameTime::m_CurrentTimeMS doesn\'t appear to be coming from a register. Script needs updating!')
+            log_error(
+                'jag::FrameTime::m_CurrentTimeMS doesn\'t appear to be coming from a register. Script needs updating!')
             return None
 
         idx = find_instruction_index(ctor_instructions, insn_using_current_time)
@@ -482,7 +435,8 @@ class Nxt:
                     ptr: LowLevelILConstPtr = operand
                     return ptr.constant
 
-            log_error('jag::FrameTime::m_CurrentTimeMS doesn\'t appear to be coming from a static address. Script needs updating!')
+            log_error(
+                'jag::FrameTime::m_CurrentTimeMS doesn\'t appear to be coming from a static address. Script needs updating!')
             break
 
         return None
