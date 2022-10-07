@@ -89,7 +89,7 @@ class ClientTcpMessage:
                  .format(fn_make_client_message.start))
 
         self.found_data.make_client_message_addr = fn_make_client_message.start
-        rename_func(fn_make_client_message, "jag::game::ServerConnection::MakeClientMessage<jag::ClientProt>")
+        change_func_name(fn_make_client_message, "jag::game::ServerConnection::MakeClientMessage<jag::ClientProt>")
 
         self._addr_some_clientprot = self._find_clientprot_addr(func_calling_make_client_message,
                                                           insn_call_make_client_message)
@@ -118,7 +118,7 @@ class ClientTcpMessage:
                 num_register_refs = len(list(bv.get_code_refs(ptr.constant)))
                 if self.MIN_CLIENT_PROTS < num_register_refs < self.MAX_CLIENT_PROTS:
                     func = bv.get_function_at(ptr.constant)
-                    rename_func(func, 'jag::RegisterClientProt')
+                    change_func_name(func, 'jag::RegisterClientProt')
                     if len(func.parameter_vars) == 3:
                         change_var(func.parameter_vars[0], 'pClientProt', Type.pointer(bv.arch, self.found_data.types.client_prot))
                         change_var(func.parameter_vars[1], 'opCode', Type.int(4, False))

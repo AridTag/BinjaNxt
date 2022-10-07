@@ -11,16 +11,14 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with BinjaNxt.
 If not, see <https://www.gnu.org/licenses/>.
 """
-from binaryninja import *
-from binaryninja.log import log_error, log_warn, log_info
-from binaryninja.enums import AnalysisSkipReason
-
-from BinjaNxt.NxtUtils import *
-from BinjaNxt.PacketHandler import PacketHandlers
 from BinjaNxt.ClientTcpMessage import ClientTcpMessage
 from BinjaNxt.JagTypes import *
 from BinjaNxt.NxtAnalysisData import NxtAnalysisData
-from BinjaNxt.ClientProtInfo import ClientProtInfo
+from BinjaNxt.NxtUtils import *
+from BinjaNxt.PacketHandler import PacketHandlers
+from binaryninja import *
+from binaryninja.log import log_error, log_warn, log_info
+from BinjaNxt.Isaac import Isaac
 
 
 # from NxtAnalysisData import NxtAnalysisData
@@ -32,11 +30,13 @@ class Nxt:
     found_data: NxtAnalysisData
     packet_handlers: PacketHandlers
     client_tcp_message: ClientTcpMessage
+    isaac_cipher: Isaac
 
     def __init__(self):
         self.found_data = NxtAnalysisData()
         self.packet_handlers = PacketHandlers(self.found_data)
         self.client_tcp_message = ClientTcpMessage(self.found_data)
+        self.isaac_cipher = Isaac(self.found_data)
 
     def run(self, bv: BinaryView) -> bool:
         if bv is None:
@@ -45,15 +45,12 @@ class Nxt:
         self.found_data.types.create_types(bv)
         if not self.refactor_app_init(bv):
             log_error('Failed to refactor jag::App::MainInit')
-
         if not self.refactor_connection_manager(bv):
             log_error('Failed to refactor jag::ConnectionManager')
-
         if not self.packet_handlers.run(bv, self.found_data.connection_manager_ctor_addr):
             log_error('Failed to refactor packets')
-
         self.client_tcp_message.run(bv)
-
+        if not self.isaac_cipher.run(bv): log_error("Failed to refactor the Isaac Cipher")
         self.found_data.print_info()
         return True
 
@@ -62,7 +59,7 @@ class Nxt:
         if main_init is None:
             return False
 
-        rename_func(main_init, 'jag::App::MainInit')
+        change_func_name(main_init, 'jag::App::MainInit')
 
         if not self.find_alloc_and_client_ctor(bv, main_init):
             return False
@@ -152,7 +149,7 @@ class Nxt:
                 found_alloc = True
                 checked_alloc = bv.get_function_at(dest_addr)
                 self.found_data.checked_alloc_addr = checked_alloc.start
-                rename_func(checked_alloc, '{}::CheckedAlloc'.format(self.found_data.types.heap_interface_name))
+                change_func_name(checked_alloc, '{}::CheckedAlloc'.format(self.found_data.types.heap_interface_name))
                 change_ret_type(checked_alloc, Type.pointer(bv.arch, Type.void()))
                 change_var(checked_alloc.parameter_vars[0], 'num_bytes', Type.int(4))
                 change_var(checked_alloc.parameter_vars[1], 'alignment', Type.int(4))
@@ -167,7 +164,7 @@ class Nxt:
 
                 client_ctor = bv.get_function_at(dest_addr)
                 self.found_data.client_ctor_addr = client_ctor.start
-                rename_func(client_ctor, '{}::ctor'.format(self.found_data.types.client_name))
+                change_func_name(client_ctor, '{}::ctor'.format(self.found_data.types.client_name))
                 change_var(client_ctor.parameter_vars[0], 'pClient',
                            Type.pointer(bv.arch, self.found_data.types.client))
                 break
@@ -388,9 +385,9 @@ class Nxt:
         self.found_data.connection_manager_ctor_addr = ctor.start
         log_info('Found jag::ConnectionManager::ctor at {:#x}'.format(self.found_data.connection_manager_ctor_addr))
 
-        rename_func(ctor, '{}::ctor'.format(self.found_data.types.conn_mgr_name))
+        change_func_name(ctor, '{}::ctor'.format(self.found_data.types.conn_mgr_name))
         change_var_type(ctor.parameter_vars[0], Type.pointer(bv.arch, self.found_data.types.conn_mgr))
-        change_var_type(ctor.parameter_vars[1], Type.pointer(bv.arch, self.found_data.types.client))
+        change_var(ctor.parameter_vars[1], "client", Type.pointer(bv.arch, self.found_data.types.client))
         return True
 
     def find_current_time_addr(self,

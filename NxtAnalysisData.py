@@ -18,6 +18,8 @@ class NxtAnalysisData:
     packet_handlers: list[PacketHandlerInfo] = []
     make_client_message_addr: Optional[int] = None
     register_clientprot_addr: Optional[int] = None
+    isaac_init_addr: Optional[int] = None
+    isaac_generate_addr: Optional[int] = None
     clientprots: list[ClientProtInfo] = []
 
     def print_info(self):

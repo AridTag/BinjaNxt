@@ -1,4 +1,5 @@
 from typing import Optional
+
 from binaryninja import Type, BinaryView
 
 
@@ -31,9 +32,10 @@ class JagTypes:
 
     def create_types(self, bv: BinaryView):
         t_isaac = Type.structure(members=[
-            (Type.int(4, False), 'valuesRemaining'),
-            (Type.array(Type.int(4, False), 256), 'rand_results'),
+            (Type.int(4, False), 'valuesRemaining'),  # This may actually be value used, investigate.
+            (Type.array(Type.int(4, False), 256), 'results'),
             (Type.array(Type.int(4, False), 256), 'mm'),
+            # One of these is the counter, another is the accumulator
             (Type.int(4), 'aa'),
             (Type.int(4), 'bb'),
             (Type.int(4), 'cc')

@@ -18,6 +18,9 @@ from BinjaNxt.PacketHandlerInfo import *
 from BinjaNxt.JagTypes import *
 from BinjaNxt.NxtAnalysisData import NxtAnalysisData
 
+from BinjaNxt.NxtUtils import *
+from BinjaNxt.PacketHandlerInfo import PacketHandlerInfo, server_packet_names
+
 
 #from NxtAnalysisData import NxtAnalysisData
 #from JagTypes import *
@@ -42,10 +45,10 @@ class PacketHandlers:
             return False
 
         log_info('Found RegisterPacketHandler @ ' + hex(self.found_data.register_packet_handler_addr))
-        rename_func(bv.get_function_at(self.found_data.register_packet_handler_addr), 'jag::RegisterPacketHandler')
+        change_func_name(bv.get_function_at(self.found_data.register_packet_handler_addr), 'jag::RegisterPacketHandler')
 
         log_info('Found jag::PacketHandler::ctor @ ' + packet_handler_ctor.name)
-        rename_func(packet_handler_ctor, 'jag::PacketHandler::ctor')
+        change_func_name(packet_handler_ctor, 'jag::PacketHandler::ctor')
 
         if not self.__initialize_server_packet_infos(bv, packet_handler_ctor):
             log_error('Failed to initialize PacketHandler info')
@@ -61,7 +64,7 @@ class PacketHandlers:
 
             qualified_handler_name, clean_name = self.get_qualified_handler_name(handler.name)
             handler_ctor = bv.get_function_at(handler.ctor)
-            rename_func(handler_ctor, '{}::ctor'.format(qualified_handler_name))
+            change_func_name(handler_ctor, '{}::ctor'.format(qualified_handler_name))
 
             bv.define_data_var(handler.addr - 0x8,
                                self.found_data.types.server_prot,
@@ -91,7 +94,7 @@ class PacketHandlers:
                         # TODO: Can I create a function? what is a "user" function?
                         print('no func?')
                     else:
-                        rename_func(handle_packet_func, '{}::HandlePacket'.format(qualified_handler_name))
+                        change_func_name(handle_packet_func, '{}::HandlePacket'.format(qualified_handler_name))
 
                         if len(handle_packet_func.parameter_vars) >= 2:
                             change_var(handle_packet_func.parameter_vars[1], 'pPacket', Type.pointer(bv.arch, self.found_data.types.packet))
