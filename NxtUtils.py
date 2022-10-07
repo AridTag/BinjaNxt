@@ -34,22 +34,21 @@ class AllocationDetails:
 
 
 def int32(x: int):
-  if x>0xFFFFFFFF:
-    raise OverflowError
-  if x>0x7FFFFFFF:
-    x=int(0x100000000-x)
-    if x<2147483648:
-      return -x
-    else:
-      return -2147483648
-  return x
+    if x > 0xFFFFFFFF:
+        raise OverflowError
+    if x > 0x7FFFFFFF:
+        x = int(0x100000000 - x)
+        if x < 2147483648:
+            return -x
+        else:
+            return -2147483648
+    return x
 
 
 def ensure_func_analyzed(func: Function) -> bool:
     if func.analysis_skipped:
         log_warn('Function {} was not analyzed. Reason {}'.format(func.name, func.analysis_skip_reason))
         return False
-
     return True
 
 
@@ -100,12 +99,17 @@ def change_var(var: Variable, name: str, var_type: Type):
         var.set_name_async(name)
 
 
+def change_var_name(var: Variable, name: str):
+    if var.name != name:
+        var.set_name_async(name)
+
+
 def change_var_type(var: Variable, var_type: Type):
     if var.type != var_type:
         var.set_type_async(var_type)
 
 
-def rename_func(func: Function, name: str):
+def change_func_name(func: Function, name: str):
     if func.name != name:
         func.name = name
 
