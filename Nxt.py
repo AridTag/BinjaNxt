@@ -11,16 +11,14 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with BinjaNxt.
 If not, see <https://www.gnu.org/licenses/>.
 """
-from binaryninja import *
-from binaryninja.log import log_error, log_warn, log_info
-from binaryninja.enums import AnalysisSkipReason
-
-from BinjaNxt.NxtUtils import *
-from BinjaNxt.PacketHandler import PacketHandlers
 from BinjaNxt.ClientTcpMessage import ClientTcpMessage
 from BinjaNxt.JagTypes import *
 from BinjaNxt.NxtAnalysisData import NxtAnalysisData
-from BinjaNxt.ClientProtInfo import ClientProtInfo
+from BinjaNxt.NxtUtils import *
+from BinjaNxt.PacketHandler import PacketHandlers
+from binaryninja import *
+from binaryninja.log import log_error, log_warn, log_info
+from BinjaNxt.Isaac import Isaac
 
 
 # from NxtAnalysisData import NxtAnalysisData
@@ -32,11 +30,13 @@ class Nxt:
     found_data: NxtAnalysisData
     packet_handlers: PacketHandlers
     client_tcp_message: ClientTcpMessage
+    isaac_cipher: Isaac
 
     def __init__(self):
         self.found_data = NxtAnalysisData()
         self.packet_handlers = PacketHandlers(self.found_data)
         self.client_tcp_message = ClientTcpMessage(self.found_data)
+        self.isaac_cipher = Isaac(self.found_data)
 
     def run(self, bv: BinaryView) -> bool:
         if bv is None:
@@ -45,15 +45,12 @@ class Nxt:
         self.found_data.types.create_types(bv)
         if not self.refactor_app_init(bv):
             log_error('Failed to refactor jag::App::MainInit')
-
         if not self.refactor_connection_manager(bv):
             log_error('Failed to refactor jag::ConnectionManager')
-
         if not self.packet_handlers.run(bv, self.found_data.connection_manager_ctor_addr):
             log_error('Failed to refactor packets')
-
         self.client_tcp_message.run(bv)
-
+        if not self.isaac_cipher.run(bv): log_error("Failed to refactor the Isaac Cipher")
         self.found_data.print_info()
         return True
 
