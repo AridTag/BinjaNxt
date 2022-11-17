@@ -1,5 +1,5 @@
 # BinjaNxt
-Author: **AridTag**
+Author: **AridTag** and [Contributors](https://github.com/AridTag/BinjaNxt/graphs/contributors)
 
 Binary Ninja plugin for automated refactoring of the RuneScape Nxt client
 
